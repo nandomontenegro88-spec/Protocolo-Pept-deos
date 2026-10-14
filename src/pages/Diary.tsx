@@ -3,6 +3,7 @@ import { useApp } from '../lib/app-context'
 import { unwrap, uploadPrivate, useLoad, useNearViewport, useSignedUrl } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { progress } from '../lib/pregnancy'
+import { Heart, MoonStars, Smiley, SmileyMeh, SmileyNervous, SmileySad } from '@phosphor-icons/react'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
 import { Rise } from '../components/motion'
 
@@ -15,7 +16,19 @@ interface Entry {
   note: string | null
 }
 
-const MOODS = ['😍', '😊', '😐', '😴', '🤢', '😢']
+const MOODS = [
+  { key: 'apaixonada', label: 'Apaixonada', Icon: Heart },
+  { key: 'bem', label: 'Bem', Icon: Smiley },
+  { key: 'normal', label: 'Normal', Icon: SmileyMeh },
+  { key: 'cansada', label: 'Cansada', Icon: MoonStars },
+  { key: 'enjoada', label: 'Enjoada', Icon: SmileyNervous },
+  { key: 'em-baixo', label: 'Em baixo', Icon: SmileySad },
+] as const
+
+function MoodIcon({ mood }: { mood: string | null }) {
+  const m = MOODS.find((x) => x.key === mood)
+  return m ? <m.Icon size={20} weight="duotone" aria-label={m.label} /> : null
+}
 
 export default function Diary() {
   const { coupleId, dueDate } = useApp()
@@ -85,7 +98,7 @@ function EntryView({ e }: { e: Entry }) {
         </div>
       )}
       <div>
-        <div>{e.mood} {e.weight_kg != null && <span className="chip">{e.weight_kg} kg</span>}</div>
+        <div className="mood-line"><MoodIcon mood={e.mood} /> {e.weight_kg != null && <span className="chip">{e.weight_kg} kg</span>}</div>
         {e.note && <p>{e.note}</p>}
       </div>
     </div>
@@ -127,10 +140,14 @@ function EditEntry({ week, entry, coupleId, onClose, onSaved }: { week: number; 
           <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
         <div className="moods">
-          {MOODS.map((m) => <button key={m} className={m === mood ? 'on' : ''} onClick={() => setMood(m === mood ? '' : m)}>{m}</button>)}
+          {MOODS.map(({ key, label, Icon }) => (
+            <button key={key} className={key === mood ? 'on' : ''} aria-label={label} aria-pressed={key === mood} onClick={() => setMood(key === mood ? '' : key)}>
+              <Icon size={26} weight={key === mood ? 'fill' : 'regular'} aria-hidden />
+            </button>
+          ))}
         </div>
-        <input inputMode="decimal" placeholder="Peso em kg (opcional)" value={weight} onChange={(e) => setWeight(e.target.value)} />
-        <textarea rows={4} placeholder="Notas" value={note} onChange={(e) => setNote(e.target.value)} />
+        <input aria-label="Peso em kg" inputMode="decimal" placeholder="Peso em kg (opcional)" value={weight} onChange={(e) => setWeight(e.target.value)} />
+        <textarea aria-label="Notas" rows={4} placeholder="Notas" value={note} onChange={(e) => setNote(e.target.value)} />
         <Err msg={err} />
         <button className="btn" disabled={busy} onClick={save}>Guardar</button>
       </div>

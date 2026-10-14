@@ -38,6 +38,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
           <motion.div
             className="sheet"
             role="dialog"
+            aria-modal="true"
             aria-label={title}
             onClick={(e) => e.stopPropagation()}
             initial={{ y: '100%' }}

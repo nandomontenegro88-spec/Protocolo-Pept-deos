@@ -4,7 +4,10 @@ import { MotionConfig } from 'motion/react'
 import App from './App'
 import './styles.css'
 
-createRoot(document.getElementById('root')!).render(
+const root = document.getElementById('root')!
+root.classList.add('bebe')
+
+createRoot(root).render(
   <StrictMode>
     <MotionConfig reducedMotion="user">
       <App />

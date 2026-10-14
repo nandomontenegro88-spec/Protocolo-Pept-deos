@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Heart, Plus, X } from '@phosphor-icons/react'
+import { Heart, Plus, Question, ThumbsDown, ThumbsUp, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
@@ -12,11 +12,11 @@ type Vote = 'sim' | 'talvez' | 'nao'
 interface NameRow { id: string; name: string }
 interface VoteRow { name_id: string; vote: Vote }
 
-const VOTES: { v: Vote; label: string }[] = [
-  { v: 'sim', label: '👍 Sim' },
-  { v: 'talvez', label: '🤔 Talvez' },
-  { v: 'nao', label: '👎 Não' },
-]
+const VOTES = [
+  { v: 'sim', label: 'Sim', Icon: ThumbsUp },
+  { v: 'talvez', label: 'Talvez', Icon: Question },
+  { v: 'nao', label: 'Não', Icon: ThumbsDown },
+] as const
 
 export default function Names() {
   const { coupleId, userId } = useApp()
@@ -76,7 +76,7 @@ export default function Names() {
         <>
           <p className="muted">Os teus votos são secretos. O teu par só vê os nomes em que ambos disseram sim.</p>
           <form className="inline" onSubmit={(e) => { e.preventDefault(); void add() }}>
-            <input placeholder="Adicionar nome" value={name} onChange={(e) => setName(e.target.value)} />
+            <input aria-label="Adicionar nome" placeholder="Adicionar nome" value={name} onChange={(e) => setName(e.target.value)} />
             <button className="btn small" aria-label="Adicionar nome"><Plus size={18} weight="bold" /></button>
           </form>
           <Err msg={err} />
@@ -88,8 +88,16 @@ export default function Names() {
                 <button className="icon-btn" aria-label="Apagar" onClick={() => remove(n.id)}><X size={18} /></button>
               </div>
               <div className="votes">
-                {VOTES.map(({ v, label }) => (
-                  <button key={v} className={mine.get(n.id) === v ? `on ${v}` : ''} onClick={() => vote(n.id, v)}>{label}</button>
+                {VOTES.map(({ v, label, Icon }) => (
+                  <button
+                    key={v}
+                    className={mine.get(n.id) === v ? `on ${v}` : ''}
+                    aria-pressed={mine.get(n.id) === v}
+                    onClick={() => vote(n.id, v)}
+                  >
+                    <Icon size={18} weight={mine.get(n.id) === v ? 'fill' : 'regular'} aria-hidden />
+                    {label}
+                  </button>
                 ))}
               </div>
             </ListRow>

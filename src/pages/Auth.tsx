@@ -28,10 +28,16 @@ export default function AuthPage() {
       <h1>Bebé a caminho</h1>
       <p className="muted">A vossa gravidez, a dois.</p>
       <form onSubmit={submit} className="stack">
-        <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
-        <input type="password" placeholder="Palavra-passe (mín. 6)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === 'in' ? 'current-password' : 'new-password'} />
+        <label className="field">
+          <span>Email</span>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+        </label>
+        <label className="field">
+          <span>Palavra-passe (mínimo 6 caracteres)</span>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === 'in' ? 'current-password' : 'new-password'} />
+        </label>
         <button className="btn" disabled={busy}>{mode === 'in' ? 'Entrar' : 'Criar conta'}</button>
-        {msg && <p className="error">{msg}</p>}
+        {msg && <p className="error" role="alert">{msg}</p>}
       </form>
       <button className="link" onClick={() => setMode(mode === 'in' ? 'up' : 'in')}>
         {mode === 'in' ? 'Ainda não tenho conta' : 'Já tenho conta'}

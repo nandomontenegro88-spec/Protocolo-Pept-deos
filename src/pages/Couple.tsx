@@ -20,7 +20,10 @@ export default function CouplePage({ onDone }: { onDone: () => void }) {
   return (
     <main className="screen">
       <h1>Quem és tu?</h1>
-      <input placeholder="O teu nome" value={name} onChange={(e) => setName(e.target.value)} />
+      <label className="field">
+        <span>O teu nome</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="given-name" />
+      </label>
       <div className="card stack">
         <h2>Sou o primeiro a entrar</h2>
         <p className="muted">Cria o espaço do casal e partilha o código com o teu par.</p>
@@ -30,12 +33,15 @@ export default function CouplePage({ onDone }: { onDone: () => void }) {
       </div>
       <div className="card stack">
         <h2>O meu par já criou</h2>
-        <input placeholder="Código de convite" value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="characters" />
+        <label className="field">
+          <span>Código de convite</span>
+          <input value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="characters" autoComplete="off" />
+        </label>
         <button className="btn secondary" disabled={busy || !code.trim()} onClick={() => run(() => supabase.rpc('join_couple', { p_code: code, p_name: name.trim() }))}>
           Entrar com código
         </button>
       </div>
-      {err && <p className="error">{err}</p>}
+      {err && <p className="error" role="alert">{err}</p>}
     </main>
   )
 }

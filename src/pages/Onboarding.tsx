@@ -47,8 +47,8 @@ export default function Onboarding({ coupleId, onDone }: { coupleId: string; onD
           <p className="muted">Parto previsto a {formatDate(due)}. Faltam {p.daysLeft} dias.</p>
         </div>
       )}
-      {due && !valid && <p className="error">Esta data não dá uma gravidez em curso. Confirma-a.</p>}
-      {err && <p className="error">{err}</p>}
+      {due && !valid && <p className="error" role="alert">Esta data não dá uma gravidez em curso. Confirma-a.</p>}
+      {err && <p className="error" role="alert">{err}</p>}
       <button className="btn" disabled={!valid || busy} onClick={save}>Continuar</button>
     </main>
   )

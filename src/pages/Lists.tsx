@@ -54,7 +54,9 @@ export default function Lists() {
       <AnimatePresence initial={false}>
       {data.map((i) => (
         <ListRow key={i.id} className="card item">
-          <input type="checkbox" checked={i.done} onChange={() => run(supabase.from('list_items').update({ done: !i.done }).eq('id', i.id))} />
+          <label className="hit">
+            <input type="checkbox" aria-label={`Feito: ${i.title}`} checked={i.done} onChange={() => run(supabase.from('list_items').update({ done: !i.done }).eq('id', i.id))} />
+          </label>
           <button
             className={`link grow ${i.done ? 'done' : ''}`}
             onClick={() => {
@@ -84,7 +86,7 @@ export default function Lists() {
           if (title.trim()) { void add(title.trim()); setTitle('') }
         }}
       >
-        <input placeholder="Novo item" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input aria-label="Novo item" placeholder="Novo item" value={title} onChange={(e) => setTitle(e.target.value)} />
         <button className="btn small" aria-label="Adicionar item"><Plus size={18} weight="bold" /></button>
       </form>
       <Err msg={err} />

@@ -88,12 +88,24 @@ function AddAppt({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
   return (
     <Sheet title="Nova marcação" onClose={onClose}>
       <div className="stack">
-        <select value={kind} onChange={(e) => setKind(e.target.value as Appt['kind'])}>
-          {Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <input placeholder="Título (ex.: Ecografia morfológica)" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
-        <input placeholder="Local (opcional)" value={location} onChange={(e) => setLocation(e.target.value)} />
+        <label className="field">
+          <span>Tipo</span>
+          <select value={kind} onChange={(e) => setKind(e.target.value as Appt['kind'])}>
+            {Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Título</span>
+          <input placeholder="Ex.: Ecografia morfológica" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Data e hora</span>
+          <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Local (opcional)</span>
+          <input value={location} onChange={(e) => setLocation(e.target.value)} />
+        </label>
         <Err msg={err} />
         <button className="btn" onClick={save}>Guardar</button>
       </div>
@@ -175,12 +187,12 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
         </div>
       ))}
       <div className="inline">
-        <input placeholder="Nova pergunta" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQ()} />
+        <input aria-label="Nova pergunta" placeholder="Nova pergunta" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQ()} />
         <button className="btn small" onClick={addQ} aria-label="Adicionar pergunta"><Plus size={18} weight="bold" /></button>
       </div>
 
       <h3 className="section">Notas pós-consulta</h3>
-      <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="O que foi dito, valores, próximos passos…" />
+      <textarea aria-label="Notas pós-consulta" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="O que foi dito, valores, próximos passos…" />
 
       <h3 className="section">Ecografias e documentos</h3>
       {files.data.map((f) => (
