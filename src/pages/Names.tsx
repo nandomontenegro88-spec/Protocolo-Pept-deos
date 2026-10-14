@@ -1,8 +1,11 @@
 import { useCallback, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { Heart, Plus, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { Err, Header } from '../components/ui'
+import { ListRow } from '../components/motion'
 
 type Vote = 'sim' | 'talvez' | 'nao'
 interface NameRow { id: string; name: string }
@@ -69,30 +72,42 @@ export default function Names() {
 
       {tab === 'vote' ? (
         <>
-          <p className="muted">Os teus votos são secretos — o teu par só vê os nomes em que ambos disseram sim.</p>
+          <p className="muted">Os teus votos são secretos. O teu par só vê os nomes em que ambos disseram sim.</p>
           <form className="inline" onSubmit={(e) => { e.preventDefault(); void add() }}>
             <input placeholder="Adicionar nome" value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="btn small">+</button>
+            <button className="btn small" aria-label="Adicionar nome"><Plus size={18} weight="bold" /></button>
           </form>
           <Err msg={err} />
+          <AnimatePresence initial={false}>
           {names.data.map((n) => (
-            <div key={n.id} className="card">
+            <ListRow key={n.id} className="card">
               <div className="row">
                 <strong className="name">{n.name}</strong>
-                <button className="link" aria-label="Apagar" onClick={() => remove(n.id)}>✕</button>
+                <button className="icon-btn" aria-label="Apagar" onClick={() => remove(n.id)}><X size={18} /></button>
               </div>
               <div className="votes">
                 {VOTES.map(({ v, label }) => (
                   <button key={v} className={mine.get(n.id) === v ? `on ${v}` : ''} onClick={() => vote(n.id, v)}>{label}</button>
                 ))}
               </div>
-            </div>
+            </ListRow>
           ))}
+          </AnimatePresence>
         </>
       ) : matches.data.length === 0 ? (
         <p className="muted">Ainda sem matches. Quando os dois votarem 👍 no mesmo nome, aparece aqui.</p>
       ) : (
-        matches.data.map((n) => <div key={n.id} className="card match">💞 {n.name}</div>)
+        matches.data.map((n, i) => (
+          <motion.div
+            key={n.id}
+            className="card match"
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 18, delay: i * 0.06 }}
+          >
+            <Heart size={24} weight="fill" aria-hidden /> {n.name}
+          </motion.div>
+        ))
       )}
     </>
   )

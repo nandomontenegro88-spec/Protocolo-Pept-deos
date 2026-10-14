@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react'
+import { motion } from 'motion/react'
 import { useApp } from '../lib/app-context'
 import { useLoad, unwrap } from '../lib/hooks'
 import { formatDate, formatDateTime, progress } from '../lib/pregnancy'
 import { supabase } from '../lib/supabase'
 import { weekInfo } from '../data/weeks'
-import { Header } from '../components/ui'
+import { Header, Skeleton } from '../components/ui'
+import { Rise, ease } from '../components/motion'
 
 interface Appt { id: string; title: string; kind: string; starts_at: string }
 
@@ -27,19 +29,26 @@ export default function Home() {
       ) as Appt[],
     [coupleId],
   )
-  const { data: next } = useLoad(fetchNext, [] as Appt[])
+  const { data: next, loading } = useLoad(fetchNext, [] as Appt[])
 
   return (
     <>
       <Header title="Início" right={<button className="link" onClick={signOut}>Sair</button>} />
 
-      <section className="card hero">
+      <Rise><section className="card hero">
         <div className="big-emoji">{w.emoji}</div>
         <h2>
           {p.weeks} semanas{p.days ? ` e ${p.days} ${p.days === 1 ? 'dia' : 'dias'}` : ''}
         </h2>
         <p className="muted">{p.trimester}.º trimestre · semana {p.currentWeek}</p>
-        <div className="bar"><div style={{ width: `${p.percent}%` }} /></div>
+        <div className="bar">
+          <motion.div
+            className="bar-fill"
+            initial={{ scaleX: 0 }}
+            animate={{ scaleX: p.percent / 100 }}
+            transition={{ duration: 0.9, delay: 0.2, ease }}
+          />
+        </div>
         <p>
           {p.daysLeft > 0 ? (
             <><strong>{p.daysLeft}</strong> dias para a data prevista ({formatDate(dueDate)})</>
@@ -49,9 +58,9 @@ export default function Home() {
             <>Passaram {-p.daysLeft} dias da data prevista</>
           )}
         </p>
-      </section>
+      </section></Rise>
 
-      <section className="card">
+      <Rise i={1}><section className="card">
         <h2>Esta semana</h2>
         <p>
           O bebé tem o tamanho de um(a) <strong>{w.fruit}</strong> {w.emoji}
@@ -59,11 +68,12 @@ export default function Home() {
           {w.grams ? ` · ~${w.grams >= 1000 ? (w.grams / 1000).toLocaleString('pt-PT') + ' kg' : w.grams + ' g'}` : ''}
         </p>
         <p>{w.text}</p>
-      </section>
+      </section></Rise>
 
-      <section className="card">
+      <Rise i={2}><section className="card">
         <h2>Próximas consultas</h2>
-        {next.length === 0 && <p className="muted">Nada agendado. Adiciona em Consultas.</p>}
+        {loading && <Skeleton h={44} />}
+        {!loading && next.length === 0 && <p className="muted">Nada agendado. Adiciona em Consultas.</p>}
         {next.map((a) => (
           <div key={a.id} className="row">
             <div>
@@ -73,17 +83,17 @@ export default function Home() {
             <span className="chip">{a.kind}</span>
           </div>
         ))}
-      </section>
+      </section></Rise>
 
       {members.length < 2 && (
-        <section className="card">
+        <Rise i={3}><section className="card">
           <h2>Convida o teu par</h2>
           <p className="muted">Código para entrar no vosso espaço:</p>
           <p className="code">{inviteCode}</p>
-        </section>
+        </section></Rise>
       )}
 
-      <section className="card">
+      <Rise i={4}><section className="card">
         <button className="link" onClick={() => setEditing(!editing)}>Corrigir data prevista</button>
         {editing && (
           <input
@@ -92,7 +102,7 @@ export default function Home() {
             onChange={(e) => e.target.value && void setDueDate(e.target.value)}
           />
         )}
-      </section>
+      </section></Rise>
     </>
   )
 }

@@ -3,7 +3,9 @@ import { useApp } from '../lib/app-context'
 import { signedUrl, unwrap, uploadPrivate, useLoad } from '../lib/hooks'
 import { formatDateTime } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
-import { Err, Header, Sheet } from '../components/ui'
+import { Paperclip, Plus, X } from '@phosphor-icons/react'
+import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
+import { Rise } from '../components/motion'
 
 interface Appt {
   id: string
@@ -28,20 +30,21 @@ export default function Appointments() {
       unwrap(await supabase.from('appointments').select('*').eq('couple_id', coupleId).order('starts_at')) as Appt[],
     [coupleId],
   )
-  const { data, reload, error } = useLoad(fetchAll, [] as Appt[])
+  const { data, reload, error, loading } = useLoad(fetchAll, [] as Appt[])
   const now = new Date().toISOString()
   const upcoming = data.filter((a) => a.starts_at >= now)
   const past = data.filter((a) => a.starts_at < now).reverse()
 
   return (
     <>
-      <Header title="Consultas e exames" right={<button className="btn small" onClick={() => setAdding(true)}>+ Novo</button>} />
+      <Header title="Consultas e exames" right={<button className="btn small" onClick={() => setAdding(true)}><Plus size={18} weight="bold" aria-hidden /> Novo</button>} />
       <Err msg={error} />
+      {loading && <PageSkeleton rows={3} />}
       <h3 className="section">Próximas</h3>
-      {upcoming.length === 0 && <p className="muted">Sem marcações.</p>}
-      {upcoming.map((a) => <ApptRow key={a.id} a={a} onClick={() => setOpen(a)} />)}
+      {!loading && upcoming.length === 0 && <p className="muted">Sem marcações. Toca em Novo para adicionar a próxima consulta ou ecografia.</p>}
+      {upcoming.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
       {past.length > 0 && <h3 className="section">Anteriores</h3>}
-      {past.map((a) => <ApptRow key={a.id} a={a} onClick={() => setOpen(a)} />)}
+      {past.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
 
       {adding && <AddAppt onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload() }} />}
       {open && <Detail a={open} onClose={() => { setOpen(null); void reload() }} />}
@@ -168,12 +171,12 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
       {questions.data.map((x) => (
         <div key={x.id} className="row">
           <label className="check"><input type="checkbox" checked={x.done} onChange={() => toggleQ(x)} /> <span className={x.done ? 'done' : ''}>{x.text}</span></label>
-          <button className="link" onClick={() => delQ(x)} aria-label="Apagar">✕</button>
+          <button className="icon-btn" onClick={() => delQ(x)} aria-label="Apagar"><X size={18} /></button>
         </div>
       ))}
       <div className="inline">
         <input placeholder="Nova pergunta" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQ()} />
-        <button className="btn small" onClick={addQ}>+</button>
+        <button className="btn small" onClick={addQ} aria-label="Adicionar pergunta"><Plus size={18} weight="bold" /></button>
       </div>
 
       <h3 className="section">Notas pós-consulta</h3>
@@ -182,8 +185,8 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
       <h3 className="section">Ecografias e documentos</h3>
       {files.data.map((f) => (
         <div key={f.id} className="row">
-          <button className="link" onClick={() => openFile(f)}>📎 {f.name}</button>
-          <button className="link" onClick={() => delFile(f)} aria-label="Apagar">✕</button>
+          <button className="link" onClick={() => openFile(f)}><Paperclip size={16} aria-hidden /> {f.name}</button>
+          <button className="icon-btn" onClick={() => delFile(f)} aria-label="Apagar"><X size={18} /></button>
         </div>
       ))}
       <label className="btn secondary small">

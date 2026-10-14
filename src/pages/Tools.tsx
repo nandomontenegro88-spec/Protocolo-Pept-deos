@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { motion } from 'motion/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { formatDateTime, formatDuration } from '../lib/pregnancy'
@@ -64,13 +65,21 @@ function Kicks() {
       <p className="muted">Conta os movimentos do bebé numa sessão. Se notares menos movimentos do que o habitual, contacta a tua equipa de saúde.</p>
       {active ? (
         <>
-          <div className="counter">{active.count}</div>
+          <motion.div
+            key={active.count}
+            className="counter"
+            initial={{ scale: 1.18 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+          >
+            {active.count}
+          </motion.div>
           <p className="center muted">{formatDuration(now - new Date(active.started_at).getTime())}</p>
-          <button className="bigbtn" onClick={tap}>Mexeu!</button>
+          <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={tap}>Mexeu!</motion.button>
           <button className="btn secondary" onClick={stop}>Terminar sessão</button>
         </>
       ) : (
-        <button className="bigbtn" onClick={start}>Iniciar sessão</button>
+        <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={start}>Iniciar sessão</motion.button>
       )}
       <Err msg={err} />
       <h3 className="section">Histórico</h3>
@@ -127,7 +136,7 @@ function Contractions() {
     <>
       <p className="muted">Toca no início de cada contração e volta a tocar quando acabar. O intervalo conta-se de início a início.</p>
       {active && <div className="counter">{formatDuration(now - new Date(active.started_at).getTime())}</div>}
-      <button className={`bigbtn ${active ? 'stop' : ''}`} onClick={toggle}>{active ? 'Terminou' : 'Começou'}</button>
+      <motion.button className={`bigbtn ${active ? 'stop' : ''}`} whileTap={{ scale: 0.97 }} onClick={toggle}>{active ? 'Terminou' : 'Começou'}</motion.button>
       <Err msg={err} />
       <h3 className="section">Histórico</h3>
       {rows.filter((r) => r.c.ended_at).map(({ c, dur, gap }) => (

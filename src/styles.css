@@ -14,7 +14,7 @@ p{margin:.3em 0}code{background:var(--line);padding:0 .3em;border-radius:4px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;color:inherit;font:inherit;text-align:left;width:100%}
 .hero{text-align:center}
 .bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:10px 0}
-.bar>div{height:100%;background:var(--brand)}
+.bar-fill{height:100%;width:100%;background:var(--brand);transform-origin:left}
 .row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0}
 .row.left{cursor:pointer}
 .stack{display:flex;flex-direction:column;gap:10px}
@@ -41,7 +41,9 @@ select{width:auto;padding:8px}
 .sheet{background:var(--bg);width:100%;max-width:520px;max-height:90vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
 .timeline{display:flex;flex-direction:column;gap:10px}
 .tl{cursor:pointer}.tl-week{font-weight:700;margin-bottom:6px}
-.tl-body{display:flex;gap:12px}.tl-body img,.img-ph{width:96px;height:128px;object-fit:cover;border-radius:10px;background:var(--line);flex:none}
+.tl-body{display:flex;gap:12px}.img-ph{width:96px;height:128px;border-radius:10px;background:var(--line);flex:none;overflow:hidden}
+.img-ph img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .35s}
+.img-ph img.loaded{opacity:1}
 .moods{display:flex;gap:6px}.moods button{flex:1;font-size:1.5rem;background:var(--card);border:1px solid var(--line);border-radius:12px;min-height:48px}
 .moods button.on{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 15%,var(--card))}
 .item{display:flex;align-items:center;gap:8px;padding:8px 12px}.item input[type=checkbox]{width:22px;height:22px;min-height:0}
@@ -53,4 +55,16 @@ select{width:auto;padding:8px}
 .name{font-size:1.2rem}.match{font-size:1.3rem;font-weight:600;text-align:center}
 .counter{font:700 4.5rem ui-monospace,monospace;text-align:center;line-height:1.1}
 .bigbtn{width:100%;min-height:160px;border:0;border-radius:28px;background:var(--brand);color:#fff;font-family:inherit;font-weight:700;font-size:1.8rem;cursor:pointer;touch-action:manipulation}
-.bigbtn.stop{background:var(--no)}.bigbtn:active{transform:scale(.98)}
+.bigbtn.stop{background:var(--no)}
+
+.hero-icon{align-self:center;color:var(--brand)}
+.icon-btn{background:none;border:0;color:var(--muted);display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;border-radius:12px;cursor:pointer}
+.link svg{vertical-align:-3px}
+.match{display:flex;gap:8px;align-items:center;justify-content:center}.match svg{color:var(--brand)}
+.btn{transition:transform .15s,opacity .2s}.btn:active{transform:scale(.98)}
+.btn svg{margin-right:4px}
+.page-inner{display:flex;flex-direction:column;gap:12px}
+.skeleton{border-radius:16px;background:linear-gradient(90deg,var(--line) 25%,color-mix(in srgb,var(--line) 50%,var(--card)) 50%,var(--line) 75%);background-size:200% 100%}
+@media (prefers-reduced-motion:no-preference){.skeleton{animation:shimmer 1.4s linear infinite}}
+@keyframes shimmer{to{background-position:-200% 0}}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}

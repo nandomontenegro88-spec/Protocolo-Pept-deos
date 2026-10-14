@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Baby } from '@phosphor-icons/react'
 import { errMsg, supabase } from '../lib/supabase'
 
 export default function AuthPage() {
@@ -23,7 +24,7 @@ export default function AuthPage() {
 
   return (
     <main className="screen">
-      <div className="hero-emoji">🤰</div>
+      <Baby size={72} weight="duotone" className="hero-icon" aria-hidden />
       <h1>Bebé a caminho</h1>
       <p className="muted">A vossa gravidez, a dois.</p>
       <form onSubmit={submit} className="stack">

@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react'
 import { useApp } from '../lib/app-context'
-import { unwrap, uploadPrivate, useLoad, useSignedUrl } from '../lib/hooks'
+import { unwrap, uploadPrivate, useLoad, useNearViewport, useSignedUrl } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { progress } from '../lib/pregnancy'
-import { Err, Header, Sheet } from '../components/ui'
+import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
+import { Rise } from '../components/motion'
 
 interface Entry {
   id: string
@@ -25,7 +26,7 @@ export default function Diary() {
     async () => unwrap(await supabase.from('diary_entries').select('*').eq('couple_id', coupleId).order('week', { ascending: false })) as Entry[],
     [coupleId],
   )
-  const { data, reload, error } = useLoad(fetchAll, [] as Entry[])
+  const { data, reload, error, loading } = useLoad(fetchAll, [] as Entry[])
   const byWeek = new Map(data.map((e) => [e.week, e]))
   const weeks = Array.from({ length: current }, (_, i) => current - i)
 
@@ -33,14 +34,17 @@ export default function Diary() {
     <>
       <Header title="Diário da barriga" />
       <Err msg={error} />
+      {loading && <PageSkeleton rows={3} />}
       <div className="timeline">
-        {weeks.map((w) => {
+        {!loading && weeks.map((w, i) => {
           const e = byWeek.get(w)
           return (
-            <button key={w} className="card tl" onClick={() => setEditing({ week: w, entry: e })}>
-              <div className="tl-week">Semana {w}</div>
-              {e ? <EntryView e={e} /> : <div className="muted">{w === current ? 'Toca para adicionar a foto desta semana' : 'Sem registo — toca para adicionar'}</div>}
-            </button>
+            <Rise key={w} i={i}>
+              <button className="card tl" onClick={() => setEditing({ week: w, entry: e })}>
+                <div className="tl-week">Semana {w}</div>
+                {e ? <EntryView e={e} /> : <div className="muted">{w === current ? 'Toca para adicionar a foto desta semana' : 'Sem registo. Toca para adicionar.'}</div>}
+              </button>
+            </Rise>
           )
         })}
       </div>
@@ -58,10 +62,28 @@ export default function Diary() {
 }
 
 function EntryView({ e }: { e: Entry }) {
-  const url = useSignedUrl(e.photo_path)
+  // O URL assinado e a imagem só são pedidos quando o cartão se aproxima do ecrã.
+  const [ref, near] = useNearViewport<HTMLDivElement>()
+  const url = useSignedUrl(e.photo_path, near)
+  const [loaded, setLoaded] = useState(false)
   return (
-    <div className="tl-body">
-      {e.photo_path && (url ? <img src={url} alt={`Semana ${e.week}`} /> : <div className="img-ph" />)}
+    <div className="tl-body" ref={ref}>
+      {e.photo_path && (
+        <div className="img-ph">
+          {url && (
+            <img
+              src={url}
+              alt={`Foto da semana ${e.week}`}
+              width={96}
+              height={128}
+              loading="lazy"
+              decoding="async"
+              className={loaded ? 'loaded' : ''}
+              onLoad={() => setLoaded(true)}
+            />
+          )}
+        </div>
+      )}
       <div>
         <div>{e.mood} {e.weight_kg != null && <span className="chip">{e.weight_kg} kg</span>}</div>
         {e.note && <p>{e.note}</p>}

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { CalendarCheck, Camera, ChatsCircle, House, ListChecks, Timer } from '@phosphor-icons/react'
 import type { Session } from '@supabase/supabase-js'
 import { configured, supabase } from './lib/supabase'
 import { Ctx, type AppCtx, type Member } from './lib/app-context'
@@ -6,19 +8,29 @@ import AuthPage from './pages/Auth'
 import CouplePage from './pages/Couple'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
-import Appointments from './pages/Appointments'
-import Diary from './pages/Diary'
-import Lists from './pages/Lists'
-import Names from './pages/Names'
-import Tools from './pages/Tools'
+import { PageSkeleton } from './components/ui'
+
+// Só o Início vem no pacote inicial; as restantes páginas carregam a pedido.
+const loaders = {
+  appt: () => import('./pages/Appointments'),
+  diary: () => import('./pages/Diary'),
+  lists: () => import('./pages/Lists'),
+  names: () => import('./pages/Names'),
+  tools: () => import('./pages/Tools'),
+}
+const Appointments = lazy(loaders.appt)
+const Diary = lazy(loaders.diary)
+const Lists = lazy(loaders.lists)
+const Names = lazy(loaders.names)
+const Tools = lazy(loaders.tools)
 
 const TABS = [
-  { id: 'home', label: 'Início', icon: '🏠', el: Home },
-  { id: 'appt', label: 'Consultas', icon: '📅', el: Appointments },
-  { id: 'diary', label: 'Diário', icon: '📷', el: Diary },
-  { id: 'lists', label: 'Listas', icon: '✅', el: Lists },
-  { id: 'names', label: 'Nomes', icon: '💬', el: Names },
-  { id: 'tools', label: 'Ferramentas', icon: '⏱️', el: Tools },
+  { id: 'home', label: 'Início', icon: House, el: Home },
+  { id: 'appt', label: 'Consultas', icon: CalendarCheck, el: Appointments },
+  { id: 'diary', label: 'Diário', icon: Camera, el: Diary },
+  { id: 'lists', label: 'Listas', icon: ListChecks, el: Lists },
+  { id: 'names', label: 'Nomes', icon: ChatsCircle, el: Names },
+  { id: 'tools', label: 'Ferramentas', icon: Timer, el: Tools },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -56,7 +68,7 @@ function Authed() {
     return () => data.subscription.unsubscribe()
   }, [])
 
-  if (session === undefined) return <div className="screen center muted">A carregar…</div>
+  if (session === undefined) return <div className="screen"><PageSkeleton /></div>
   if (!session) return <AuthPage />
   return <WithSession userId={session.user.id} />
 }
@@ -89,7 +101,13 @@ function WithSession({ userId }: { userId: string }) {
     void load()
   }, [load])
 
-  if (state === undefined) return <div className="screen center muted">A carregar…</div>
+  // Com a app já aberta, descarrega as outras páginas quando o navegador está livre.
+  useEffect(() => {
+    const idle = window.requestIdleCallback ?? ((f: () => void) => window.setTimeout(f, 1500))
+    idle(() => Object.values(loaders).forEach((l) => void l()))
+  }, [])
+
+  if (state === undefined) return <div className="screen"><PageSkeleton /></div>
   if (state === null) return <CouplePage onDone={load} />
   if (!state.dueDate) return <Onboarding coupleId={state.coupleId} onDone={load} />
 
@@ -105,7 +123,7 @@ function WithSession({ userId }: { userId: string }) {
       if (error) throw new Error(error.message)
       await load()
     },
-    nameOf: (id) => members.find((m) => m.user_id === id)?.display_name ?? '—',
+    nameOf: (id) => members.find((m) => m.user_id === id)?.display_name ?? 'Alguém',
     signOut: async () => {
       await supabase.auth.signOut()
     },
@@ -115,12 +133,30 @@ function WithSession({ userId }: { userId: string }) {
   return (
     <Ctx.Provider value={ctx}>
       <main className="page">
-        <Page />
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={tab}
+            className="page-inner"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <Suspense fallback={<PageSkeleton />}>
+              <Page />
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
       </main>
       <nav className="tabbar">
         {TABS.map((t) => (
-          <button key={t.id} className={t.id === tab ? 'on' : ''} onClick={() => setTab(t.id)}>
-            <span aria-hidden>{t.icon}</span>
+          <button
+            key={t.id}
+            className={t.id === tab ? 'on' : ''}
+            aria-current={t.id === tab ? 'page' : undefined}
+            onClick={() => setTab(t.id)}
+          >
+            <t.icon size={24} weight={t.id === tab ? 'fill' : 'regular'} aria-hidden />
             {t.label}
           </button>
         ))}

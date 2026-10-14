@@ -1,9 +1,12 @@
 import { useCallback, useState } from 'react'
+import { AnimatePresence } from 'motion/react'
+import { Plus, X } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { LISTS, type ListKey } from '../data/suggestions'
-import { Err, Header } from '../components/ui'
+import { Err, Header, Skeleton } from '../components/ui'
+import { ListRow } from '../components/motion'
 
 interface Item { id: string; title: string; assignee: string | null; done: boolean }
 
@@ -20,7 +23,7 @@ export default function Lists() {
       ) as Item[],
     [coupleId, list],
   )
-  const { data, reload } = useLoad(fetchItems, [] as Item[])
+  const { data, reload, loading } = useLoad(fetchItems, [] as Item[])
 
   async function run(p: PromiseLike<{ error: { message: string } | null }>) {
     const { error } = await p
@@ -43,12 +46,14 @@ export default function Lists() {
       </div>
       <p className="muted">{LISTS[list].label} · {done}/{data.length} feitos</p>
 
-      {data.length === 0 && (
+      {loading && <Skeleton h={56} />}
+      {!loading && data.length === 0 && (
         <button className="btn secondary" onClick={addSuggested}>Adicionar itens sugeridos</button>
       )}
 
+      <AnimatePresence initial={false}>
       {data.map((i) => (
-        <div key={i.id} className="card item">
+        <ListRow key={i.id} className="card item">
           <input type="checkbox" checked={i.done} onChange={() => run(supabase.from('list_items').update({ done: !i.done }).eq('id', i.id))} />
           <button
             className={`link grow ${i.done ? 'done' : ''}`}
@@ -64,12 +69,13 @@ export default function Lists() {
             onChange={(e) => run(supabase.from('list_items').update({ assignee: e.target.value || null }).eq('id', i.id))}
             aria-label="Responsável"
           >
-            <option value="">—</option>
+            <option value="">Ninguém</option>
             {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
           </select>
-          <button className="link" aria-label="Apagar" onClick={() => run(supabase.from('list_items').delete().eq('id', i.id))}>✕</button>
-        </div>
+          <button className="icon-btn" aria-label="Apagar" onClick={() => run(supabase.from('list_items').delete().eq('id', i.id))}><X size={18} /></button>
+        </ListRow>
       ))}
+      </AnimatePresence>
 
       <form
         className="inline"
@@ -79,7 +85,7 @@ export default function Lists() {
         }}
       >
         <input placeholder="Novo item" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <button className="btn small">+</button>
+        <button className="btn small" aria-label="Adicionar item"><Plus size={18} weight="bold" /></button>
       </form>
       <Err msg={err} />
     </>

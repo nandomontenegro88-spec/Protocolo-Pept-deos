@@ -44,7 +44,7 @@ export default function Onboarding({ coupleId, onDone }: { coupleId: string; onD
       {due && p && valid && (
         <div className="card">
           <p><strong>{p.weeks} semanas e {p.days} dias</strong> · {p.trimester}.º trimestre</p>
-          <p className="muted">Parto previsto a {formatDate(due)} — faltam {p.daysLeft} dias.</p>
+          <p className="muted">Parto previsto a {formatDate(due)}. Faltam {p.daysLeft} dias.</p>
         </div>
       )}
       {due && !valid && <p className="error">Esta data não dá uma gravidez em curso. Confirma-a.</p>}

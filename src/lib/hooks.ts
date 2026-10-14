@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
 
 /** Carrega dados e devolve `reload`. `fn` deve ser estável (useCallback). */
@@ -40,16 +40,16 @@ export async function signedUrl(path: string): Promise<string | null> {
   return data.signedUrl
 }
 
-export function useSignedUrl(path: string | null | undefined) {
+export function useSignedUrl(path: string | null | undefined, enabled = true) {
   const [url, setUrl] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
-    if (path) void signedUrl(path).then((u) => alive && setUrl(u))
+    if (path && enabled) void signedUrl(path).then((u) => alive && setUrl(u))
     else setUrl(null)
     return () => {
       alive = false
     }
-  }, [path])
+  }, [path, enabled])
   return url
 }
 
@@ -59,4 +59,26 @@ export async function uploadPrivate(coupleId: string, file: File): Promise<strin
   const { error } = await supabase.storage.from('private').upload(path, file, { contentType: file.type })
   if (error) throw new Error(error.message)
   return path
+}
+
+/** True quando o elemento se aproxima do ecrã (carregamento diferido). */
+export function useNearViewport<T extends Element>(margin = '300px') {
+  const ref = useRef<T | null>(null)
+  const [near, setNear] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || near) return
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setNear(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: margin },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [margin, near])
+  return [ref, near] as const
 }
