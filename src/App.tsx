@@ -76,6 +76,11 @@ function Authed() {
 function WithSession({ userId }: { userId: string }) {
   const [state, setState] = useState<CoupleState | null | undefined>(undefined)
   const [tab, setTab] = useState<TabId>('home')
+  const [dir, setDir] = useState(1)
+  const go = (id: TabId) => {
+    setDir(TABS.findIndex((t) => t.id === id) > TABS.findIndex((t) => t.id === tab) ? 1 : -1)
+    setTab(id)
+  }
 
   const load = useCallback(async () => {
     const { data: mine } = await supabase
@@ -133,14 +138,20 @@ function WithSession({ userId }: { userId: string }) {
   return (
     <Ctx.Provider value={ctx}>
       <main className="page">
-        <AnimatePresence mode="wait" initial={false}>
+        {/* A página entra do lado para onde a aba está na barra e sai pelo lado oposto. */}
+        <AnimatePresence mode="wait" initial={false} custom={dir}>
           <motion.div
             key={tab}
             className="page-inner"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            custom={dir}
+            variants={{
+              enter: (d: number) => ({ opacity: 0, x: d * 28 }),
+              center: { opacity: 1, x: 0, transition: { type: 'spring', bounce: 0, duration: 0.35 } },
+              exit: (d: number) => ({ opacity: 0, x: -d * 28, transition: { duration: 0.12 } }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
           >
             <Suspense fallback={<PageSkeleton />}>
               <Page />
@@ -154,7 +165,7 @@ function WithSession({ userId }: { userId: string }) {
             key={t.id}
             className={t.id === tab ? 'on' : ''}
             aria-current={t.id === tab ? 'page' : undefined}
-            onClick={() => setTab(t.id)}
+            onClick={() => go(t.id)}
           >
             <t.icon size={24} weight={t.id === tab ? 'fill' : 'regular'} aria-hidden />
             {t.label}

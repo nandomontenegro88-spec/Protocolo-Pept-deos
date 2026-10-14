@@ -4,6 +4,7 @@ import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { formatDateTime, formatDuration } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
+import { tick } from '../lib/haptics'
 import { Err, Header } from '../components/ui'
 
 export default function Tools() {
@@ -50,6 +51,7 @@ function Kicks() {
   }
   async function tap() {
     if (!active) return
+    tick()
     const { error } = await supabase.from('kick_sessions').update({ count: active.count + 1 }).eq('id', active.id)
     setErr(error ? errMsg(error) : null)
     void reload()
@@ -110,6 +112,7 @@ function Contractions() {
   const now = useNow(!!active)
 
   async function toggle() {
+    tick(active ? 25 : 12)
     const { error } = active
       ? await supabase.from('contractions').update({ ended_at: new Date().toISOString() }).eq('id', active.id)
       : await supabase.from('contractions').insert({ couple_id: coupleId, started_at: new Date().toISOString() })

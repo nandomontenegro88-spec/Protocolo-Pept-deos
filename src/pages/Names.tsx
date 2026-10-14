@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { Err, Header } from '../components/ui'
+import { tick } from '../lib/haptics'
 import { ListRow } from '../components/motion'
 
 type Vote = 'sim' | 'talvez' | 'nao'
@@ -50,6 +51,7 @@ export default function Names() {
     void names.reload()
   }
   async function vote(id: string, v: Vote) {
+    tick(8)
     const { error } = await supabase.from('name_votes').upsert({ name_id: id, couple_id: coupleId, user_id: userId, vote: v }, { onConflict: 'name_id,user_id' })
     if (error) setErr(errMsg(error))
     void votes.reload()

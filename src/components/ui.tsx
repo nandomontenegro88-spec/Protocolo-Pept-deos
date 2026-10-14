@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useDragControls } from 'motion/react'
 import { X } from '@phosphor-icons/react'
 
 export function Header({ title, right }: { title: string; right?: ReactNode }) {
@@ -11,10 +11,14 @@ export function Header({ title, right }: { title: string; right?: ReactNode }) {
   )
 }
 
-/** Folha inferior. Anima a saída antes de chamar `onClose`. */
+/** Distância a que um gesto com esta velocidade (px/s) pararia, com a desaceleração do scroll do iOS. */
+const project = (v: number, rate = 0.998) => ((v / 1000) * rate) / (1 - rate)
+
+/** Folha inferior. Segue o dedo 1:1, projeta o momentum ao largar e anima a saída antes de chamar `onClose`. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const [open, setOpen] = useState(true)
   const close = useCallback(() => setOpen(false), [])
+  const controls = useDragControls()
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
     window.addEventListener('keydown', k)
@@ -39,9 +43,20 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 320, damping: 34 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+            drag="y"
+            dragControls={controls}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0.06, bottom: 0.7 }}
+            dragTransition={{ bounceStiffness: 500, bounceDamping: 40 }}
+            onDragEnd={(_, info) => {
+              // O destino vem da projeção do gesto, não do ponto onde o dedo largou.
+              if (info.offset.y + project(info.velocity.y) > 220) close()
+            }}
           >
-            <div className="head">
+            <div className="grabber" onPointerDown={(e) => controls.start(e)} aria-hidden />
+            <div className="head" onPointerDown={(e) => controls.start(e)}>
               <h2>{title}</h2>
               <button className="icon-btn" onClick={close} aria-label="Fechar"><X size={22} /></button>
             </div>
