@@ -1,0 +1,197 @@
+import { useCallback, useState } from 'react'
+import { useApp } from '../lib/app-context'
+import { signedUrl, unwrap, uploadPrivate, useLoad } from '../lib/hooks'
+import { formatDateTime } from '../lib/pregnancy'
+import { errMsg, supabase } from '../lib/supabase'
+import { Err, Header, Sheet } from '../components/ui'
+
+interface Appt {
+  id: string
+  kind: 'consulta' | 'ecografia' | 'analises' | 'outro'
+  title: string
+  starts_at: string
+  location: string | null
+  post_notes: string | null
+}
+interface Question { id: string; text: string; done: boolean }
+interface FileRow { id: string; path: string; name: string; content_type: string | null }
+
+const KINDS = { consulta: 'Consulta', ecografia: 'Ecografia', analises: 'Análises', outro: 'Outro' } as const
+
+export default function Appointments() {
+  const { coupleId } = useApp()
+  const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState<Appt | null>(null)
+
+  const fetchAll = useCallback(
+    async () =>
+      unwrap(await supabase.from('appointments').select('*').eq('couple_id', coupleId).order('starts_at')) as Appt[],
+    [coupleId],
+  )
+  const { data, reload, error } = useLoad(fetchAll, [] as Appt[])
+  const now = new Date().toISOString()
+  const upcoming = data.filter((a) => a.starts_at >= now)
+  const past = data.filter((a) => a.starts_at < now).reverse()
+
+  return (
+    <>
+      <Header title="Consultas e exames" right={<button className="btn small" onClick={() => setAdding(true)}>+ Novo</button>} />
+      <Err msg={error} />
+      <h3 className="section">Próximas</h3>
+      {upcoming.length === 0 && <p className="muted">Sem marcações.</p>}
+      {upcoming.map((a) => <ApptRow key={a.id} a={a} onClick={() => setOpen(a)} />)}
+      {past.length > 0 && <h3 className="section">Anteriores</h3>}
+      {past.map((a) => <ApptRow key={a.id} a={a} onClick={() => setOpen(a)} />)}
+
+      {adding && <AddAppt onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload() }} />}
+      {open && <Detail a={open} onClose={() => { setOpen(null); void reload() }} />}
+    </>
+  )
+}
+
+function ApptRow({ a, onClick }: { a: Appt; onClick: () => void }) {
+  return (
+    <button className="card row left" onClick={onClick}>
+      <div>
+        <strong>{a.title}</strong>
+        <div className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</div>
+      </div>
+      <span className="chip">{KINDS[a.kind]}</span>
+    </button>
+  )
+}
+
+function AddAppt({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { coupleId } = useApp()
+  const [kind, setKind] = useState<Appt['kind']>('consulta')
+  const [title, setTitle] = useState('')
+  const [when, setWhen] = useState('')
+  const [location, setLocation] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    if (!title.trim() || !when) return setErr('Preenche o título e a data.')
+    const { error } = await supabase.from('appointments').insert({
+      couple_id: coupleId,
+      kind,
+      title: title.trim(),
+      starts_at: new Date(when).toISOString(),
+      location: location.trim() || null,
+    })
+    if (error) setErr(errMsg(error))
+    else onSaved()
+  }
+
+  return (
+    <Sheet title="Nova marcação" onClose={onClose}>
+      <div className="stack">
+        <select value={kind} onChange={(e) => setKind(e.target.value as Appt['kind'])}>
+          {Object.entries(KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <input placeholder="Título (ex.: Ecografia morfológica)" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        <input placeholder="Local (opcional)" value={location} onChange={(e) => setLocation(e.target.value)} />
+        <Err msg={err} />
+        <button className="btn" onClick={save}>Guardar</button>
+      </div>
+    </Sheet>
+  )
+}
+
+function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
+  const { coupleId } = useApp()
+  const [notes, setNotes] = useState(a.post_notes ?? '')
+  const [q, setQ] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const fetchQ = useCallback(
+    async () => unwrap(await supabase.from('appointment_questions').select('id, text, done').eq('appointment_id', a.id).order('id')) as Question[],
+    [a.id],
+  )
+  const fetchF = useCallback(
+    async () => unwrap(await supabase.from('files').select('id, path, name, content_type').eq('appointment_id', a.id).order('created_at')) as FileRow[],
+    [a.id],
+  )
+  const questions = useLoad(fetchQ, [] as Question[])
+  const files = useLoad(fetchF, [] as FileRow[])
+
+  async function addQ() {
+    if (!q.trim()) return
+    const { error } = await supabase.from('appointment_questions').insert({ couple_id: coupleId, appointment_id: a.id, text: q.trim() })
+    if (error) return setErr(errMsg(error))
+    setQ('')
+    void questions.reload()
+  }
+  async function toggleQ(x: Question) {
+    await supabase.from('appointment_questions').update({ done: !x.done }).eq('id', x.id)
+    void questions.reload()
+  }
+  async function delQ(x: Question) {
+    await supabase.from('appointment_questions').delete().eq('id', x.id)
+    void questions.reload()
+  }
+  async function saveNotes() {
+    const { error } = await supabase.from('appointments').update({ post_notes: notes.trim() || null }).eq('id', a.id)
+    setErr(error ? errMsg(error) : null)
+  }
+  async function upload(f: File | undefined) {
+    if (!f) return
+    try {
+      const path = await uploadPrivate(coupleId, f)
+      const { error } = await supabase.from('files').insert({ couple_id: coupleId, appointment_id: a.id, path, name: f.name, content_type: f.type })
+      if (error) throw error
+      void files.reload()
+    } catch (e) {
+      setErr(errMsg(e))
+    }
+  }
+  async function openFile(f: FileRow) {
+    const url = await signedUrl(f.path)
+    if (url) window.open(url, '_blank', 'noopener')
+  }
+  async function delFile(f: FileRow) {
+    await supabase.storage.from('private').remove([f.path])
+    await supabase.from('files').delete().eq('id', f.id)
+    void files.reload()
+  }
+  async function delAppt() {
+    if (!confirm('Apagar esta marcação?')) return
+    await supabase.from('appointments').delete().eq('id', a.id)
+    onClose()
+  }
+
+  return (
+    <Sheet title={a.title} onClose={onClose}>
+      <p className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</p>
+
+      <h3 className="section">Perguntas para levar</h3>
+      {questions.data.map((x) => (
+        <div key={x.id} className="row">
+          <label className="check"><input type="checkbox" checked={x.done} onChange={() => toggleQ(x)} /> <span className={x.done ? 'done' : ''}>{x.text}</span></label>
+          <button className="link" onClick={() => delQ(x)} aria-label="Apagar">✕</button>
+        </div>
+      ))}
+      <div className="inline">
+        <input placeholder="Nova pergunta" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQ()} />
+        <button className="btn small" onClick={addQ}>+</button>
+      </div>
+
+      <h3 className="section">Notas pós-consulta</h3>
+      <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="O que foi dito, valores, próximos passos…" />
+
+      <h3 className="section">Ecografias e documentos</h3>
+      {files.data.map((f) => (
+        <div key={f.id} className="row">
+          <button className="link" onClick={() => openFile(f)}>📎 {f.name}</button>
+          <button className="link" onClick={() => delFile(f)} aria-label="Apagar">✕</button>
+        </div>
+      ))}
+      <label className="btn secondary small">
+        Carregar ficheiro
+        <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = '' }} />
+      </label>
+      <Err msg={err} />
+      <button className="link danger" onClick={delAppt}>Apagar marcação</button>
+    </Sheet>
+  )
+}
