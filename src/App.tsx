@@ -128,8 +128,8 @@ function WithSession({ userId }: { userId: string }) {
     inviteCode: state.inviteCode,
     members,
     dueDate,
-    setDueDate: async (d) => {
-      const { error } = await supabase.from('pregnancy').update({ due_date: d }).eq('couple_id', coupleId)
+    setPregnancy: async (due, lmp) => {
+      const { error } = await supabase.from('pregnancy').update({ due_date: due, lmp }).eq('couple_id', coupleId)
       if (error) throw new Error(error.message)
       await load()
     },

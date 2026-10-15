@@ -151,8 +151,6 @@ function fetus(week: number): Field {
   const spots: Spot[] = []
 
   // ---- tronco ----
-  const chestA: V = [0, 0.4, -0.1]
-  const chestB: V = [0, -0.02, -0.14]
   const torso = (x: number, y: number, z: number) => {
     // peito mais largo em cima (ombros) e a estreitar para a cintura
     let d = ell(x, y, z, 0, 0.3, -0.1, 0.4 * fat ** 0.2, 0.25, 0.29)
