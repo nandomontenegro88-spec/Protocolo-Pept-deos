@@ -37,7 +37,7 @@ export default function Appointments() {
 
   return (
     <>
-      <Header title="Consultas e exames" right={<button className="btn small" onClick={() => setAdding(true)}><Plus size={18} weight="bold" aria-hidden /> Novo</button>} />
+      <Header title="Consultas" right={<button className="btn small" onClick={() => setAdding(true)}><Plus size={18} weight="bold" aria-hidden /> Novo</button>} />
       <Err msg={error} />
       {loading && <PageSkeleton rows={3} />}
       <h3 className="section">Próximas</h3>
@@ -54,7 +54,7 @@ export default function Appointments() {
 
 function ApptRow({ a, onClick }: { a: Appt; onClick: () => void }) {
   return (
-    <button className="card row left" onClick={onClick}>
+    <button className="card tint row left" onClick={onClick}>
       <div>
         <strong>{a.title}</strong>
         <div className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</div>

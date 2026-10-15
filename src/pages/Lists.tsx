@@ -53,7 +53,7 @@ export default function Lists() {
 
       <AnimatePresence initial={false}>
       {data.map((i) => (
-        <ListRow key={i.id} className="card item">
+        <ListRow key={i.id} className="card tint item">
           <label className="hit">
             <input type="checkbox" aria-label={`Feito: ${i.title}`} checked={i.done} onChange={() => run(supabase.from('list_items').update({ done: !i.done }).eq('id', i.id))} />
           </label>

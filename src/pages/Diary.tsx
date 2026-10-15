@@ -53,9 +53,17 @@ export default function Diary() {
           const e = byWeek.get(w)
           return (
             <Rise key={w} i={i}>
-              <button className="card tl" onClick={() => setEditing({ week: w, entry: e })}>
-                <div className="tl-week">Semana {w}</div>
-                {e ? <EntryView e={e} /> : <div className="muted">{w === current ? 'Toca para adicionar a foto desta semana' : 'Sem registo. Toca para adicionar.'}</div>}
+              <button
+                className={`card tl ${e || w === current ? 'tint' : 'empty'}`}
+                data-hue={w === current ? 'coral' : undefined}
+                onClick={() => setEditing({ week: w, entry: e })}
+              >
+                <div className="tl-week"><small>semana</small>{w}</div>
+                {e ? (
+                  <EntryView e={e} />
+                ) : (
+                  <div className="muted">{w === current ? 'Esta semana: toca para juntar a foto da barriga' : 'Sem registo. Toca para adicionar.'}</div>
+                )}
               </button>
             </Rise>
           )
@@ -98,7 +106,7 @@ function EntryView({ e }: { e: Entry }) {
         </div>
       )}
       <div>
-        <div className="mood-line"><MoodIcon mood={e.mood} /> {e.weight_kg != null && <span className="chip">{e.weight_kg} kg</span>}</div>
+        <div className="mood-line"><MoodIcon mood={e.mood} /> {e.weight_kg != null && <span className="chip">{Number(e.weight_kg).toLocaleString('pt-PT')} kg</span>}</div>
         {e.note && <p>{e.note}</p>}
       </div>
     </div>

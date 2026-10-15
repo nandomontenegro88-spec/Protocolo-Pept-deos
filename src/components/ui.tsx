@@ -5,7 +5,7 @@ import { X } from '@phosphor-icons/react'
 export function Header({ title, right }: { title: string; right?: ReactNode }) {
   return (
     <header className="head">
-      <h1>{title}</h1>
+      <h1><span>{title}</span></h1>
       {right}
     </header>
   )
