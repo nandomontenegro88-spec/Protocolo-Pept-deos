@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { weekInfo } from '../data/weeks'
 import { Header, Sheet, Skeleton } from '../components/ui'
 import DatingForm from '../components/DatingForm'
+import { useBabyCredit } from '../baby/manifest'
 import { Rise, ease } from '../components/motion'
 import { useToast } from '../components/toast'
 
@@ -53,6 +54,7 @@ export default function Home() {
   const [viewWeek, setViewWeek] = useState(p.currentWeek)
   const w = weekInfo(viewWeek)
   const [no3d, setNo3d] = useState(false)
+  const credit = useBabyCredit()
   const reduce = useReducedMotion()
   const [editing, setEditing] = useState(false)
   const conc = sinceConception(p)
@@ -136,7 +138,7 @@ export default function Home() {
             </div>
           </div>
           <p>{w.text}</p>
-          {!no3d && <p className="disclaimer">Ilustração estilizada para dar uma ideia do tamanho e da forma. Não é uma imagem médica.</p>}
+          {!no3d && <p className="disclaimer">Ilustração para dar uma ideia do tamanho e da forma. Não é uma imagem médica.{credit ? ` ${credit}` : ''}</p>}
         </section>
       </Rise>
 

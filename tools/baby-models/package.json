@@ -1,0 +1,14 @@
+{
+  "name": "baby-models-tools",
+  "private": true,
+  "type": "module",
+  "description": "Prepara modelos 3D (OBJ/GLB) do bebé para a app. Corre fora da app: npm install && node prepare.mjs <ficheiro> --week 18 --length 14.2",
+  "dependencies": {
+    "@gltf-transform/core": "^4",
+    "@gltf-transform/extensions": "^4",
+    "@gltf-transform/functions": "^4",
+    "meshoptimizer": "^0.22",
+    "obj2gltf": "^3",
+    "sharp": "^0.33"
+  }
+}

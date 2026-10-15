@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js'
+import { loadManifest, pickStage, type Stage } from '../baby/manifest'
 import type { MeshData } from '../baby/surfaceNets'
 
 /**
@@ -61,18 +64,8 @@ function meshFor(week: number): Promise<MeshData> {
 }
 
 // ---------- materiais e modelos ----------
-function skinMaterial() {
-  const m = new THREE.MeshPhysicalMaterial({
-    vertexColors: true,
-    roughness: 0.46,
-    metalness: 0,
-    sheen: 1,
-    sheenColor: new THREE.Color(0xffc2ae),
-    sheenRoughness: 0.4,
-    clearcoat: 0.14,
-    clearcoatRoughness: 0.55,
-  })
-  // pele translúcida: brilho quente nos contornos (dispersão sub-superficial barata)
+/** pele translúcida: brilho quente nos contornos (dispersão sub-superficial barata) */
+function withSkinGlow(m: THREE.MeshPhysicalMaterial) {
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <emissivemap_fragment>',
@@ -82,6 +75,85 @@ function skinMaterial() {
     )
   }
   return m
+}
+
+function skinMaterial() {
+  return withSkinGlow(
+    new THREE.MeshPhysicalMaterial({
+      vertexColors: true,
+      roughness: 0.46,
+      metalness: 0,
+      sheen: 1,
+      sheenColor: new THREE.Color(0xffc2ae),
+      sheenRoughness: 0.4,
+      clearcoat: 0.14,
+      clearcoatRoughness: 0.55,
+    }),
+  )
+}
+
+// ---------- modelos profissionais (GLB) ----------
+const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+const stageCache = new Map<string, Promise<THREE.Group>>()
+
+/** Descarrega um GLB uma vez, converte os materiais para pele translúcida e guarda em cache. */
+function loadStage(stage: Stage): Promise<THREE.Group> {
+  let p = stageCache.get(stage.file)
+  if (!p) {
+    p = gltfLoader.loadAsync(`/models/baby/${stage.file}`).then((gltf) => {
+      const scene = gltf.scene
+      scene.traverse((o) => {
+        const mesh = o as THREE.Mesh
+        if (!mesh.isMesh) return
+        mesh.userData.shared = true
+        const old = mesh.material as THREE.MeshStandardMaterial
+        const m = new THREE.MeshPhysicalMaterial({
+          color: old.color ?? new THREE.Color(0xffffff),
+          map: old.map ?? null,
+          normalMap: old.normalMap ?? null,
+          normalScale: old.normalScale ?? new THREE.Vector2(1, 1),
+          roughnessMap: old.roughnessMap ?? null,
+          aoMap: old.aoMap ?? null,
+          vertexColors: !!mesh.geometry.attributes.color,
+          roughness: old.roughnessMap ? 1 : Math.min(old.roughness ?? 0.5, 0.55),
+          metalness: 0,
+          sheen: 0.8,
+          sheenColor: new THREE.Color(0xffc2ae),
+          sheenRoughness: 0.45,
+          clearcoat: 0.1,
+          clearcoatRoughness: 0.6,
+          side: old.side,
+        })
+        mesh.material = withSkinGlow(m)
+      })
+      return scene
+    })
+    stageCache.set(stage.file, p)
+    p.catch(() => stageCache.delete(stage.file))
+  }
+  return p
+}
+
+/** Centra e dimensiona o modelo para caber no mesmo enquadramento do bebé gerado por código. */
+function buildPro(stage: Stage, scene: THREE.Group, week: number): THREE.Group {
+  const model = scene.clone(true)
+  const rot = stage.rotation ?? [0, 0, 0]
+  model.rotation.set(THREE.MathUtils.degToRad(rot[0]), THREE.MathUtils.degToRad(rot[1]), THREE.MathUtils.degToRad(rot[2]))
+  model.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(model)
+  const size = box.getSize(new THREE.Vector3())
+  const center = box.getCenter(new THREE.Vector3())
+  const k = 2.0 / Math.max(size.x, size.y, size.z)
+  const norm = new THREE.Group()
+  norm.add(model)
+  model.position.sub(center)
+  norm.scale.setScalar(k)
+  const root = new THREE.Group()
+  const holder = new THREE.Group()
+  holder.add(norm)
+  root.add(holder)
+  root.scale.setScalar(sizeFor(week))
+  return root
 }
 
 const LEN: Record<number, number> = { 4: 0.1, 5: 0.2, 6: 0.6, 7: 1, 8: 1.6, 9: 2.3, 10: 3.1, 11: 4.1, 12: 5.4, 13: 7.4, 14: 8.7, 15: 10.1, 16: 11.6, 17: 13, 18: 14.2, 19: 15.3, 20: 25.6, 21: 26.7, 22: 27.8, 23: 28.9, 24: 30, 25: 34.6, 26: 35.6, 27: 36.6, 28: 37.6, 29: 38.6, 30: 39.9, 31: 41.1, 32: 42.4, 33: 43.7, 34: 45, 35: 46.2, 36: 47.4, 37: 48.6, 38: 49.8, 39: 50.7, 40: 51.2 }
@@ -156,6 +228,7 @@ function buildBaby(week: number, mesh: MeshData | null): THREE.Group {
 
 function disposeGroup(g: THREE.Object3D) {
   g.traverse((o) => {
+    if (o.userData.shared) return // geometria e materiais do GLB são partilhados pela cache
     const mesh = o as THREE.Mesh
     if (mesh.geometry) mesh.geometry.dispose()
     const mat = mesh.material as THREE.Material | THREE.Material[] | undefined
@@ -173,7 +246,7 @@ interface Props {
 
 export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
   const host = useRef<HTMLDivElement>(null)
-  const api = useRef<{ show: (w: number) => void } | null>(null)
+  const api = useRef<{ show: (w: number) => Promise<void> | void } | null>(null)
 
   useEffect(() => {
     const el = host.current
@@ -229,31 +302,45 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
     let dirty = true
     let alive = true
 
-    function place(w: number, mesh: MeshData | null) {
+    function place(w: number, group: THREE.Group, source: 'pro' | 'procedural') {
       if (!alive) return
       if (current) {
         pivot.remove(current)
         disposeGroup(current)
       }
-      current = buildBaby(w, mesh)
+      current = group
       pivot.add(current)
       shownWeek = w
       born = performance.now()
       el!.dataset.busy = 'false'
+      el!.dataset.source = source
       dirty = true
     }
 
-    function show(w: number) {
+    async function show(w: number) {
       wanted = w
-      if (w <= 3) return place(w, null)
-      if (!cache.has(w)) el!.dataset.busy = 'true'
-      void meshFor(w).then((m) => {
-        if (wanted === w && alive) {
-          place(w, m)
-          // aquece as semanas vizinhas para a navegação ser instantânea
-          for (const n of [w + 1, w - 1]) if (n > 3 && n <= 40 && !cache.has(n)) window.setTimeout(() => alive && void meshFor(n), 600)
+      if (w <= 3) return place(w, buildBaby(w, null), 'procedural')
+      // 1. modelo profissional (GLB), se existir um perto desta semana
+      const manifest = await loadManifest()
+      const stage = manifest ? pickStage(manifest, w) : null
+      if (stage) {
+        if (!stageCache.has(stage.file)) el!.dataset.busy = 'true'
+        try {
+          const scene = await loadStage(stage)
+          if (wanted === w && alive) place(w, buildPro(stage, scene, w), 'pro')
+          return
+        } catch (e) {
+          console.warn('Modelo 3D profissional indisponível, a usar o gerado por código', e)
         }
-      })
+      }
+      // 2. bebé gerado por código (worker + cache)
+      if (!cache.has(w)) el!.dataset.busy = 'true'
+      const m = await meshFor(w)
+      if (wanted === w && alive) {
+        place(w, buildBaby(w, m), 'procedural')
+        // aquece as semanas vizinhas para a navegação ser instantânea
+        for (const n of [w + 1, w - 1]) if (n > 3 && n <= 40 && !cache.has(n)) window.setTimeout(() => alive && void meshFor(n), 600)
+      }
     }
     api.current = { show }
     show(week)
