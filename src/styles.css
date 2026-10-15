@@ -227,3 +227,15 @@ html,body{background:#0d1130;margin:0;overscroll-behavior-y:none}
 .fruit-name{margin:0}
 .disclaimer{font-size:.8rem;color:var(--muted);margin:0}
 @media (prefers-reduced-transparency:reduce){.round,.weekpill{background:var(--panel);backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+/* datas da gravidez */
+.dating-seg{flex-wrap:wrap;border-radius:26px}
+.dating-seg button{flex:1 1 44%;font-size:.88rem}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.pick{flex:1;min-height:52px;border-radius:99px;border:1.5px solid var(--rule);background:var(--panel-2);color:var(--ink);font:700 .95rem var(--display);cursor:pointer;padding:0 14px}
+.pick.on{background:var(--hue);border-color:var(--hue);color:var(--on-gold)}
+.dating-result p{margin:.25em 0}
+.conc{margin-top:0}
+
+.baby3d-host{transition:opacity .25s}
+.baby3d-host[data-busy=true]{opacity:.55}

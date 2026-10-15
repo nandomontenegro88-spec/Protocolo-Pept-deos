@@ -1,197 +1,157 @@
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import type { MeshData } from '../baby/surfaceNets'
 
 /**
- * Bebé 3D estilizado, construído por código (sem modelos externos).
+ * Bebé 3D estilizado, esculpido por código (sem modelos externos).
+ * A malha lisa é calculada num worker a partir de um campo de distância (ver baby/field.ts).
  * É uma ilustração: as proporções variam com a semana, mas não são uma imagem médica.
- * - Semanas 4 a 8: embrião em "C", com botões de membros e saco vitelino.
- * - Semanas 9 a 40: feto enrolado, com membros, orelhas, nariz e cordão umbilical.
  */
 
-const SKIN = 0xf2b8a1
-const CORD = 0xd48aa6
-const YOLK = 0xffd36b
+const CELL = 0.019 // tamanho da célula da malha: mais pequeno = mais detalhe e mais tempo de cálculo
 
-const smooth = (a: number, b: number, x: number) => {
-  const t = Math.min(Math.max((x - a) / (b - a), 0), 1)
-  return t * t * (3 - 2 * t)
+// ---------- cálculo da malha (worker + cache) ----------
+const cache = new Map<number, MeshData>()
+const pending = new Map<number, Promise<MeshData>>()
+let worker: Worker | null = null
+let workerFailed = false
+const waiters = new Map<number, ((m: MeshData) => void)[]>()
+
+function getWorker(): Worker | null {
+  if (worker || workerFailed) return worker
+  try {
+    worker = new Worker(new URL('../baby/baby.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e: MessageEvent<{ week: number; mesh: MeshData }>) => {
+      cache.set(e.data.week, e.data.mesh)
+      pending.delete(e.data.week)
+      waiters.get(e.data.week)?.forEach((r) => r(e.data.mesh))
+      waiters.delete(e.data.week)
+    }
+    worker.onerror = () => {
+      workerFailed = true
+      worker = null
+    }
+  } catch {
+    workerFailed = true
+  }
+  return worker
 }
 
-function skinMaterial(color = SKIN, opacity = 1) {
-  return new THREE.MeshPhysicalMaterial({
-    color,
-    roughness: 0.52,
+function meshFor(week: number): Promise<MeshData> {
+  const hit = cache.get(week)
+  if (hit) return Promise.resolve(hit)
+  const inflight = pending.get(week)
+  if (inflight) return inflight
+  const w = getWorker()
+  const p = w
+    ? new Promise<MeshData>((resolve) => {
+        waiters.set(week, [...(waiters.get(week) ?? []), resolve])
+        w.postMessage({ week, cell: CELL })
+      })
+    : // sem worker: calcula na thread principal (mais lento, mas funciona)
+      Promise.all([import('../baby/field'), import('../baby/surfaceNets')]).then(([f, s]) => {
+        const m = s.surfaceNets(f.buildField(week), CELL)
+        cache.set(week, m)
+        pending.delete(week)
+        return m
+      })
+  pending.set(week, p)
+  return p
+}
+
+// ---------- materiais e modelos ----------
+function skinMaterial() {
+  const m = new THREE.MeshPhysicalMaterial({
+    vertexColors: true,
+    roughness: 0.46,
     metalness: 0,
     sheen: 1,
-    sheenColor: new THREE.Color(0xffd9c8),
-    sheenRoughness: 0.45,
-    clearcoat: 0.18,
-    clearcoatRoughness: 0.5,
-    transparent: opacity < 1,
-    opacity,
+    sheenColor: new THREE.Color(0xffc2ae),
+    sheenRoughness: 0.4,
+    clearcoat: 0.14,
+    clearcoatRoughness: 0.55,
   })
+  // pele translúcida: brilho quente nos contornos (dispersão sub-superficial barata)
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+       float fres = pow(1.0 - saturate(dot(normalize(vNormal), normalize(vViewPosition))), 2.0);
+       totalEmissiveRadiance += vec3(1.0, 0.36, 0.24) * fres * 0.3;`,
+    )
+  }
+  return m
 }
 
-function blob(g: THREE.Group, m: THREE.Material, r: [number, number, number], p: [number, number, number]) {
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), m)
-  mesh.scale.set(r[0], r[1], r[2])
-  mesh.position.set(...p)
-  g.add(mesh)
-  return mesh
-}
-
-/** Membro cónico entre dois pontos, com esferas nas pontas (articulações macias). */
-function limb(g: THREE.Group, m: THREE.Material, a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number) {
-  const dir = new THREE.Vector3().subVectors(b, a)
-  const len = dir.length()
-  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, len, 24, 1, true), m)
-  cyl.position.copy(a).addScaledVector(dir, 0.5)
-  cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
-  g.add(cyl)
-  for (const [p, r] of [[a, r0], [b, r1]] as const) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), m)
-    s.position.copy(p)
-    g.add(s)
-  }
-}
-
-function buildEmbryo(week: number): THREE.Group {
-  const g = new THREE.Group()
-  const m = skinMaterial()
-  const t = smooth(4, 8, week) // 0 = botão minúsculo, 1 = embrião em C
-  // Muitas esferas sobrepostas dão uma superfície contínua e lisa.
-  const n = 56
-  const R = 0.7
-  const point = (u: number) => {
-    const ang = THREE.MathUtils.lerp(-0.35, 3.95, u)
-    const rad = R * (1 - 0.3 * u)
-    return { x: Math.cos(ang) * rad * 0.86, y: Math.sin(ang) * rad - 0.08, nx: Math.cos(ang), ny: Math.sin(ang) }
-  }
-  for (let i = 0; i < n; i++) {
-    const u = i / (n - 1)
-    const headBlend = 1 - smooth(0.0, 0.22, u)
-    const body = THREE.MathUtils.lerp(0.25, 0.045, Math.pow(Math.min(Math.max((u - 0.1) / 0.9, 0), 1), 0.85))
-    const r = THREE.MathUtils.lerp(body, 0.36, headBlend) * (0.5 + 0.5 * t)
-    const q = point(u)
-    blob(g, m, [r, r, r * 0.95], [q.x, q.y, 0])
-  }
-  const h = point(0.02)
-  // olho
-  if (week >= 6) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), new THREE.MeshStandardMaterial({ color: 0x2a1a2e, roughness: 0.4 }))
-    eye.position.set(h.x + 0.2, h.y - 0.02, 0.22)
-    g.add(eye)
-  }
-  // botões dos membros: dois braços e duas pernas
-  if (week >= 6) {
-    const bud = 0.07 + 0.05 * smooth(6, 8, week)
-    for (const u of [0.3, 0.36, 0.7, 0.76]) {
-      const q = point(u)
-      const body = THREE.MathUtils.lerp(0.25, 0.045, Math.pow((u - 0.1) / 0.9, 0.85)) * (0.5 + 0.5 * t)
-      blob(g, m, [bud * 0.9, bud * 1.2, bud * 0.9], [q.x + q.nx * (body + bud * 0.4), q.y + q.ny * (body + bud * 0.4), 0.08])
-    }
-  }
-  // saco vitelino ligado por um fio
-  const yolk = new THREE.Mesh(
-    new THREE.SphereGeometry(0.3, 40, 28),
-    new THREE.MeshPhysicalMaterial({ color: YOLK, roughness: 0.2, transparent: true, opacity: 0.9, clearcoat: 1, clearcoatRoughness: 0.2 }),
-  )
-  yolk.position.set(0.82, -0.62, -0.05)
-  g.add(yolk)
-  const stalk = new THREE.CatmullRomCurve3([new THREE.Vector3(0.36, -0.42, 0), new THREE.Vector3(0.58, -0.5, 0), new THREE.Vector3(0.72, -0.57, -0.03)])
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(stalk, 16, 0.035, 8), new THREE.MeshStandardMaterial({ color: CORD, roughness: 0.5 })))
-  g.scale.setScalar(0.8 + 0.2 * t)
-  return g
-}
-
-function buildFetus(week: number): THREE.Group {
-  const g = new THREE.Group()
-  const m = skinMaterial()
-  const grow = smooth(9, 24, week) // 0 = pequeno e de cabeça grande, 1 = proporções de bebé
-  const lateGrow = smooth(24, 40, week)
-  const headR = THREE.MathUtils.lerp(0.43, 0.36, grow) + 0.01 * lateGrow
-  const limbK = THREE.MathUtils.lerp(0.55, 1, smooth(9, 20, week)) // comprimento dos membros
-  const limbR = THREE.MathUtils.lerp(0.55, 1, smooth(9, 28, week)) + 0.12 * lateGrow // espessura
-  const body = 1 + 0.08 * lateGrow
-
-  // tronco: peito e bacia
-  blob(g, m, [0.36 * body, 0.44, 0.31 * body], [0, 0.12, -0.06])
-  blob(g, m, [0.33 * body, 0.33, 0.31 * body], [0, -0.34, -0.02])
-
-  // cabeça inclinada para o peito
-  const headPos: [number, number, number] = [0, 0.66 - (headR - 0.36) * 0.4, 0.2]
-  const head = blob(g, m, [headR, headR * 0.96, headR * 1.04], headPos)
-  head.rotation.x = 0.35
-  // orelhas, nariz e olhos fechados
-  if (week >= 12) {
-    for (const s of [-1, 1]) blob(g, m, [0.045, 0.075, 0.04], [s * (headR * 0.97), headPos[1] - 0.03, headPos[2] - 0.03])
-  }
-  if (week >= 14) {
-    blob(g, skinMaterial(0xe9a48f), [0.05, 0.05, 0.06], [0, headPos[1] - headR * 0.16, headPos[2] + headR * 0.97])
-    const lid = new THREE.MeshStandardMaterial({ color: 0x8b5a66, roughness: 0.6 })
-    for (const s of [-1, 1]) {
-      const arc = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 20, Math.PI), lid)
-      arc.position.set(s * headR * 0.38, headPos[1] + headR * 0.1, headPos[2] + headR * 0.88)
-      arc.rotation.set(0.35, 0, Math.PI)
-      g.add(arc)
-    }
-  }
-  if (week >= 28) {
-    // cabelo suave
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(headR * 1.02, 32, 20, 0, Math.PI * 2, 0, 0.9), new THREE.MeshStandardMaterial({ color: 0x5b3a2e, roughness: 0.9 }))
-    hair.position.set(...headPos)
-    hair.rotation.x = 0.1
-    g.add(hair)
-  }
-
-  // braços dobrados, mãos junto ao rosto
-  for (const s of [-1, 1]) {
-    const sh = new THREE.Vector3(s * 0.36 * body, 0.3, 0.02)
-    const el = new THREE.Vector3(s * (0.4 + 0.05 * limbK) * body, 0.3 - 0.3 * limbK, 0.3 * limbK + 0.04)
-    const ha = new THREE.Vector3(s * 0.22 * limbK, 0.3 + 0.16 * limbK, 0.42 + 0.04 * limbK)
-    const r = 0.095 * limbR
-    limb(g, m, sh, el, r, r * 0.82)
-    limb(g, m, el, ha, r * 0.82, r * 0.7)
-    blob(g, m, [0.085 * limbR, 0.075 * limbR, 0.07 * limbR], [ha.x, ha.y, ha.z])
-  }
-  // pernas encolhidas contra a barriga
-  for (const s of [-1, 1]) {
-    const hip = new THREE.Vector3(s * 0.21, -0.46, 0.08)
-    const knee = new THREE.Vector3(s * (0.26 + 0.04 * limbK), -0.12 * limbK - 0.2, 0.42 + 0.1 * limbK)
-    const foot = new THREE.Vector3(s * 0.15, -0.55 + 0.06 * limbK, 0.36 + 0.1 * limbK)
-    const r = 0.13 * limbR
-    limb(g, m, hip, knee, r, r * 0.8)
-    limb(g, m, knee, foot, r * 0.8, r * 0.62)
-    blob(g, m, [0.1 * limbR, 0.06 * limbR, 0.13 * limbR], [foot.x, foot.y - 0.03, foot.z + 0.06])
-  }
-
-  // cordão umbilical
-  const cord = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, -0.22, 0.3),
-    new THREE.Vector3(0.2, -0.5, 0.64),
-    new THREE.Vector3(0.52, -0.72, 0.52),
-    new THREE.Vector3(0.6, -0.86, 0.22),
-    new THREE.Vector3(0.42, -0.88, 0.02),
-  ])
-  g.add(new THREE.Mesh(new THREE.TubeGeometry(cord, 48, 0.05, 10), new THREE.MeshStandardMaterial({ color: CORD, roughness: 0.55 })))
-
-  g.scale.setScalar(0.82 + 0.18 * grow)
-  g.position.y = 0.05
-  return g
-}
-
-// comprimento aproximado (cm) por semana, para o modelo crescer de forma visível
 const LEN: Record<number, number> = { 4: 0.1, 5: 0.2, 6: 0.6, 7: 1, 8: 1.6, 9: 2.3, 10: 3.1, 11: 4.1, 12: 5.4, 13: 7.4, 14: 8.7, 15: 10.1, 16: 11.6, 17: 13, 18: 14.2, 19: 15.3, 20: 25.6, 21: 26.7, 22: 27.8, 23: 28.9, 24: 30, 25: 34.6, 26: 35.6, 27: 36.6, 28: 37.6, 29: 38.6, 30: 39.9, 31: 41.1, 32: 42.4, 33: 43.7, 34: 45, 35: 46.2, 36: 47.4, 37: 48.6, 38: 49.8, 39: 50.7, 40: 51.2 }
 
-export function buildBaby(week: number): THREE.Group {
-  const inner = week <= 8 ? buildEmbryo(week) : buildFetus(week)
+function sizeFor(week: number) {
   const cm = LEN[Math.min(Math.max(week, 4), 40)]
-  // o tamanho percebido cresce com a raiz do comprimento: bebés pequenos ficam visivelmente pequenos
-  const size = 0.5 + 0.5 * Math.pow(cm / 51.2, 0.42)
-  const g = new THREE.Group()
-  g.add(inner)
-  g.scale.setScalar(size)
+  return 0.5 + 0.5 * Math.pow(cm / 51.2, 0.42) // bebés pequenos ficam visivelmente pequenos
+}
+
+function geometryFrom(m: MeshData) {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.BufferAttribute(m.positions, 3))
+  g.setAttribute('normal', new THREE.BufferAttribute(m.normals, 3))
+  g.setAttribute('color', new THREE.BufferAttribute(m.colors, 3))
+  g.setIndex(new THREE.BufferAttribute(m.indices, 1))
+  g.computeBoundingSphere()
   return g
+}
+
+const cordMaterial = () =>
+  new THREE.MeshPhysicalMaterial({ color: 0xcf8ba6, roughness: 0.4, sheen: 1, sheenColor: new THREE.Color(0xffc6d6), clearcoat: 0.3 })
+
+function buildBaby(week: number, mesh: MeshData | null): THREE.Group {
+  const root = new THREE.Group()
+  const inner = new THREE.Group()
+  root.add(inner)
+  if (week <= 3 || !mesh) {
+    // semanas 1 a 3: ainda não há embrião. Mostra o óvulo fecundado / blastocisto.
+    const shell = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 48, 36),
+      new THREE.MeshPhysicalMaterial({ color: 0xffe0cf, roughness: 0.25, transmission: 0.0, transparent: true, opacity: 0.55, clearcoat: 1, sheen: 1, sheenColor: new THREE.Color(0xffd2bf) }),
+    )
+    inner.add(shell)
+    const cells = new THREE.MeshPhysicalMaterial({ color: 0xf0a68f, roughness: 0.45, sheen: 1, sheenColor: new THREE.Color(0xffc2ae) })
+    const pts = [[0.12, 0.08, 0], [-0.1, 0.1, 0.05], [0.02, -0.1, 0.06], [-0.08, -0.04, -0.09], [0.1, -0.05, -0.07], [0, 0.0, 0.12], [-0.02, 0.14, -0.08]]
+    for (const [x, y, z] of pts) {
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.1, 24, 18), cells)
+      c.position.set(x, y, z)
+      inner.add(c)
+    }
+    root.scale.setScalar(0.62)
+    return root
+  }
+  inner.add(new THREE.Mesh(geometryFrom(mesh), skinMaterial()))
+  if (week <= 8) {
+    // saco vitelino com um fio
+    const yolk = new THREE.Mesh(
+      new THREE.SphereGeometry(0.3, 40, 28),
+      new THREE.MeshPhysicalMaterial({ color: 0xffd36b, roughness: 0.2, transparent: true, opacity: 0.92, clearcoat: 1, clearcoatRoughness: 0.2 }),
+    )
+    yolk.position.set(0.82, -0.62, -0.02)
+    inner.add(yolk)
+    const stalk = new THREE.CatmullRomCurve3([new THREE.Vector3(0.36, -0.42, 0), new THREE.Vector3(0.58, -0.5, 0), new THREE.Vector3(0.72, -0.57, -0.02)])
+    inner.add(new THREE.Mesh(new THREE.TubeGeometry(stalk, 16, 0.035, 8), cordMaterial()))
+    inner.scale.setScalar(0.8 + 0.2 * Math.min(Math.max((week - 4) / 4, 0), 1))
+  } else {
+    // cordão umbilical a partir do umbigo
+    const cord = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0, -0.27, 0.34),
+      new THREE.Vector3(0.08, -0.4, 0.62),
+      new THREE.Vector3(0.34, -0.62, 0.66),
+      new THREE.Vector3(0.56, -0.8, 0.4),
+      new THREE.Vector3(0.52, -0.92, 0.1),
+      new THREE.Vector3(0.3, -0.96, -0.12),
+    ])
+    inner.add(new THREE.Mesh(new THREE.TubeGeometry(cord, 60, 0.05, 12), cordMaterial()))
+    inner.position.y = -0.04
+  }
+  root.scale.setScalar(sizeFor(week))
+  return root
 }
 
 function disposeGroup(g: THREE.Object3D) {
@@ -228,32 +188,38 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.05
+    renderer.toneMappingExposure = 0.92
     renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab'
     el.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50)
-    camera.position.set(0, 0.05, 4.1)
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50)
+    camera.position.set(0, 0.05, 4.3)
 
-    // luz: céu quente, brilho dourado de cima, contra-luz azul (paleta da app)
-    scene.add(new THREE.HemisphereLight(0xfff1e0, 0x6a74d9, 0.95))
-    const key = new THREE.DirectionalLight(0xffe2b8, 2.4)
-    key.position.set(2.5, 3.5, 4)
+    // luz de estúdio suave + reflexos de ambiente discretos
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    const envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = envTex
+    scene.environmentIntensity = 0.35
+    scene.add(new THREE.HemisphereLight(0xfff0e0, 0x6a70d0, 0.45))
+    const key = new THREE.DirectionalLight(0xffdcb0, 2.9)
+    key.position.set(2.6, 3.4, 3.4)
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0x8fa4ff, 1.6)
-    rim.position.set(-3.5, 1, -3)
+    const rim = new THREE.DirectionalLight(0x9db0ff, 1.7)
+    rim.position.set(-3.5, 1.2, -3)
     scene.add(rim)
-    const fill = new THREE.PointLight(0xffb48a, 14, 12)
-    fill.position.set(-1.5, -1.2, 3)
+    const fill = new THREE.PointLight(0xffb48a, 10, 12)
+    fill.position.set(-1.6, -1, 3)
     scene.add(fill)
 
     const pivot = new THREE.Group()
     scene.add(pivot)
 
     let current: THREE.Group | null = null
-    let born = 0 // instante em que o modelo atual apareceu (para a animação de entrada)
-    let yaw = 0.6
+    let shownWeek = -1
+    let wanted = week
+    let born = 0
+    let yaw = -0.45
     let vel = 0
     let dragging = false
     let lastX = 0
@@ -261,16 +227,33 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
     let visible = true
     let raf = 0
     let dirty = true
+    let alive = true
 
-    function show(w: number) {
+    function place(w: number, mesh: MeshData | null) {
+      if (!alive) return
       if (current) {
         pivot.remove(current)
         disposeGroup(current)
       }
-      current = buildBaby(w)
+      current = buildBaby(w, mesh)
       pivot.add(current)
+      shownWeek = w
       born = performance.now()
+      el!.dataset.busy = 'false'
       dirty = true
+    }
+
+    function show(w: number) {
+      wanted = w
+      if (w <= 3) return place(w, null)
+      if (!cache.has(w)) el!.dataset.busy = 'true'
+      void meshFor(w).then((m) => {
+        if (wanted === w && alive) {
+          place(w, m)
+          // aquece as semanas vizinhas para a navegação ser instantânea
+          for (const n of [w + 1, w - 1]) if (n > 3 && n <= 40 && !cache.has(n)) window.setTimeout(() => alive && void meshFor(n), 600)
+        }
+      })
     }
     api.current = { show }
     show(week)
@@ -335,7 +318,7 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
           vel *= Math.pow(0.04, dt) // atrito
           dirty = true
         } else if (!reducedMotion) {
-          yaw += 0.28 * dt // rotação lenta em repouso
+          yaw += 0.26 * dt // rotação lenta em repouso
           dirty = true
         }
       }
@@ -350,7 +333,7 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
         dirty = true
       }
       if (!reducedMotion) {
-        pivot.position.y = Math.sin(now / 1300) * 0.035 // flutua
+        pivot.position.y = Math.sin(now / 1300) * 0.03 // flutua
         dirty = true
       }
       pivot.rotation.y = yaw
@@ -362,6 +345,7 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
     raf = requestAnimationFrame(tickFrame)
 
     return () => {
+      alive = false
       cancelAnimationFrame(raf)
       ro.disconnect()
       io.disconnect()
@@ -370,17 +354,20 @@ export default function Baby3D({ week, onUnsupported, reducedMotion }: Props) {
       dom.removeEventListener('pointerup', up)
       dom.removeEventListener('pointercancel', up)
       if (current) disposeGroup(current)
+      envTex.dispose()
+      pmrem.dispose()
       renderer.dispose()
       renderer.domElement.remove()
       api.current = null
+      void shownWeek
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // mudar de semana reconstrói o modelo
+  // mudar de semana pede a malha da nova semana (e mantém a anterior até chegar)
   useEffect(() => {
     api.current?.show(week)
   }, [week])
 
-  return <div ref={host} className="baby3d-host" role="img" aria-label={`Ilustração 3D do bebé na semana ${week}. Arrasta para rodar.`} />
+  return <div ref={host} className="baby3d-host" data-busy="true" role="img" aria-label={`Ilustração 3D do bebé na semana ${week}. Arrasta para rodar.`} />
 }

@@ -11,7 +11,7 @@ export interface AppCtx {
   inviteCode: string
   members: Member[]
   dueDate: string
-  setDueDate: (d: string) => Promise<void>
+  setPregnancy: (due: string, lmp: string) => Promise<void>
   nameOf: (userId: string | null | undefined) => string
   signOut: () => Promise<void>
 }

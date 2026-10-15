@@ -38,7 +38,7 @@ export interface Progress {
   weeks: number
   /** dias além das semanas completas */
   days: number
-  /** semana em curso (1-based), limitada a 1..40 */
+  /** semanas completas (o "semana N" das apps), limitado a 1..40; coincide com o que o topo mostra */
   currentWeek: number
   trimester: 1 | 2 | 3
   daysLeft: number
@@ -51,7 +51,7 @@ export function progress(due: string, today = startOfToday()): Progress {
   const totalDays = Math.max(diffDays(today, lmp), 0)
   const weeks = Math.floor(totalDays / 7)
   const days = totalDays % 7
-  const currentWeek = Math.min(Math.max(weeks + 1, 1), 40)
+  const currentWeek = Math.min(Math.max(weeks, 1), 40)
   const trimester = weeks < 14 ? 1 : weeks < 28 ? 2 : 3
   return {
     weeks,
@@ -84,4 +84,34 @@ export function formatDuration(ms: number): string {
   const m = Math.floor(s / 60)
   const sec = String(s % 60).padStart(2, '0')
   return `${m}:${sec}`
+}
+
+// ---------- Como se conta a gravidez ----------
+// Contagem clínica: dias desde o 1.º dia da última menstruação (DUM). É a que os médicos e as ecografias usam.
+// A conceção (ovulação) acontece cerca de 14 dias depois, por isso "semanas desde a conceção" = semanas clínicas - 2.
+// Os testes digitais com indicador de semanas contam desde a ovulação: "1-2 semanas" = 3-4 semanas clínicas.
+
+export type TestRange = '1-2' | '2-3' | '3+'
+
+/** Semanas desde a ovulação (ponto médio do intervalo do teste). */
+const TEST_OVULATION_DAYS: Record<TestRange, number> = { '1-2': 10.5, '2-3': 17.5, '3+': 24.5 }
+
+export function lmpFromConception(conception: string): string {
+  const d = parseDate(conception)
+  d.setDate(d.getDate() - 14)
+  return toDateOnly(d)
+}
+
+/** DUM estimada a partir do intervalo indicado por um teste digital. */
+export function lmpFromTest(range: TestRange, today = startOfToday()): string {
+  const d = new Date(today)
+  d.setDate(d.getDate() - Math.round(TEST_OVULATION_DAYS[range] + 14))
+  return toDateOnly(d)
+}
+
+/** Semanas e dias desde a conceção, dado o progresso clínico. */
+export function sinceConception(p: { totalDays: number }): { weeks: number; days: number } | null {
+  const d = p.totalDays - 14
+  if (d < 0) return null
+  return { weeks: Math.floor(d / 7), days: d % 7 }
 }

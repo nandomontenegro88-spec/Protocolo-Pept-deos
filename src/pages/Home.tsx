@@ -3,10 +3,11 @@ import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 
 import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { useLoad, unwrap } from '../lib/hooks'
-import { formatDate, formatDateTime, progress } from '../lib/pregnancy'
+import { formatDate, formatDateTime, progress, sinceConception } from '../lib/pregnancy'
 import { supabase } from '../lib/supabase'
 import { weekInfo } from '../data/weeks'
-import { Header, Skeleton } from '../components/ui'
+import { Header, Sheet, Skeleton } from '../components/ui'
+import DatingForm from '../components/DatingForm'
 import { Rise, ease } from '../components/motion'
 import { useToast } from '../components/toast'
 
@@ -47,13 +48,14 @@ function Moon({ percent }: { percent: number }) {
 }
 
 export default function Home() {
-  const { userId, nameOf, dueDate, coupleId, members, inviteCode, signOut, setDueDate } = useApp()
+  const { userId, nameOf, dueDate, coupleId, members, inviteCode, signOut, setPregnancy } = useApp()
   const p = progress(dueDate)
   const [viewWeek, setViewWeek] = useState(p.currentWeek)
   const w = weekInfo(viewWeek)
   const [no3d, setNo3d] = useState(false)
   const reduce = useReducedMotion()
   const [editing, setEditing] = useState(false)
+  const conc = sinceConception(p)
   const toast = useToast()
 
   const fetchNext = useCallback(
@@ -81,9 +83,14 @@ export default function Home() {
           <div className="hero-copy">
             <div className="weeknum">{p.weeks}</div>
             <div className="weeklabel">
-              semanas{p.days ? ` e ${p.days} ${p.days === 1 ? 'dia' : 'dias'}` : ''}
+              {p.weeks === 1 ? 'semana' : 'semanas'}{p.days ? ` e ${p.days} ${p.days === 1 ? 'dia' : 'dias'}` : ''}
             </div>
             <p className="muted">{p.trimester}.º trimestre</p>
+            {conc && (
+              <p className="muted conc">
+                ≈ {conc.weeks} {conc.weeks === 1 ? 'semana' : 'semanas'} desde a conceção
+              </p>
+            )}
             <p className="countdown">
               {p.daysLeft > 0 ? (
                 <><strong>{p.daysLeft}</strong> dias para {formatDate(dueDate, { day: 'numeric', month: 'long' })}</>
@@ -102,10 +109,10 @@ export default function Home() {
           {!no3d && (
             <div className="stage">
               <Suspense fallback={<div className="stage-loading" aria-hidden />}>
-                <Baby3D week={Math.max(viewWeek, 4)} reducedMotion={!!reduce} onUnsupported={() => setNo3d(true)} />
+                <Baby3D week={viewWeek} reducedMotion={!!reduce} onUnsupported={() => setNo3d(true)} />
               </Suspense>
               <div className="weekbar">
-                <button className="round" aria-label="Semana anterior" disabled={viewWeek <= 4} onClick={() => setViewWeek((x) => Math.max(4, x - 1))}>
+                <button className="round" aria-label="Semana anterior" disabled={viewWeek <= 1} onClick={() => setViewWeek((x) => Math.max(1, x - 1))}>
                   <CaretLeft size={20} weight="bold" aria-hidden />
                 </button>
                 <button className="weekpill" onClick={() => setViewWeek(p.currentWeek)} aria-label={viewWeek === p.currentWeek ? `Semana ${viewWeek}, a semana de hoje` : `Semana ${viewWeek}. Tocar para voltar a hoje`}>
@@ -162,19 +169,26 @@ export default function Home() {
 
       <Rise i={4}>
         <section className="card">
-          <button className="link" onClick={() => setEditing(!editing)}>Corrigir data prevista</button>
-          {editing && (
-            <input
-              aria-label="Data prevista do parto"
-              type="date"
-              defaultValue={dueDate}
-              onChange={(e) => {
-                if (e.target.value) void setDueDate(e.target.value).then(() => toast('Data prevista atualizada'))
-              }}
-            />
-          )}
+          <button className="link" onClick={() => setEditing(true)}>Como contamos as semanas? Rever as datas</button>
         </section>
       </Rise>
+      {editing && (
+        <Sheet title="Datas da gravidez" onClose={() => setEditing(false)}>
+          <p className="muted">
+            A app conta como os médicos: desde o 1.º dia da última menstruação. A conceção acontece cerca de 2 semanas depois, e é essa a contagem dos testes de farmácia. Por isso, "1-2 semanas" no teste são 3-4 semanas aqui.
+          </p>
+          <DatingForm
+            cta="Guardar datas"
+            onSave={(due, lmp) => {
+              void setPregnancy(due, lmp).then(() => {
+                toast('Datas atualizadas')
+                setViewWeek(progress(due).currentWeek)
+                setEditing(false)
+              })
+            }}
+          />
+        </Sheet>
+      )}
     </>
   )
 }
