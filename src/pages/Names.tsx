@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { Err, Header } from '../components/ui'
+import { useUndoable } from '../components/toast'
 import { tick } from '../lib/haptics'
 import { ListRow } from '../components/motion'
 
@@ -23,6 +24,8 @@ export default function Names() {
   const [tab, setTab] = useState<'vote' | 'matches'>('vote')
   const [name, setName] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const undoable = useUndoable()
 
   const fetchNames = useCallback(
     async () => unwrap(await supabase.from('baby_names').select('id, name').eq('couple_id', coupleId).order('name')) as NameRow[],
@@ -57,12 +60,24 @@ export default function Names() {
     void votes.reload()
     void matches.reload()
   }
-  async function remove(id: string) {
-    if (!confirm('Apagar este nome?')) return
-    await supabase.from('baby_names').delete().eq('id', id)
-    void names.reload()
-    void matches.reload()
-  }
+  const setHide = (id: string, on: boolean) =>
+    setHidden((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  const remove = (n: NameRow) =>
+    undoable(`"${n.name}" apagado`, {
+      hide: () => setHide(n.id, true),
+      restore: () => setHide(n.id, false),
+      commit: async () => {
+        await supabase.from('baby_names').delete().eq('id', n.id)
+        await Promise.all([names.reload(), matches.reload()])
+        setHide(n.id, false)
+      },
+    })
+  const shown = names.data.filter((n) => !hidden.has(n.id))
 
   return (
     <>
@@ -81,11 +96,18 @@ export default function Names() {
           </form>
           <Err msg={err} />
           <AnimatePresence initial={false}>
-          {names.data.map((n) => (
+          {!names.loading && shown.length === 0 && (
+            <div className="card empty">
+              <Heart size={40} weight="duotone" aria-hidden />
+              <h2>Ainda sem nomes</h2>
+              <p className="muted">Escreve o primeiro acima. Cada um adiciona os seus e vota em segredo.</p>
+            </div>
+          )}
+          {shown.map((n) => (
             <ListRow key={n.id} className="card">
               <div className="row">
                 <strong className="name">{n.name}</strong>
-                <button className="icon-btn" aria-label="Apagar" onClick={() => remove(n.id)}><X size={18} /></button>
+                <button className="icon-btn" aria-label={`Apagar: ${n.name}`} onClick={() => remove(n)}><X size={18} /></button>
               </div>
               <div className="votes">
                 {VOTES.map(({ v, label, Icon }) => (

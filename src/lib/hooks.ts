@@ -19,6 +19,18 @@ export function useLoad<T>(fn: () => PromiseLike<T>, initial: T) {
   useEffect(() => {
     void reload()
   }, [reload])
+  // O casal partilha os dados: ao voltar à app, vai buscar o que o par alterou.
+  useEffect(() => {
+    let last = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - last > 5000) {
+        last = Date.now()
+        void reload()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [reload])
   return { data, loading, error, reload }
 }
 

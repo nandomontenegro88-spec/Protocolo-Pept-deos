@@ -5,6 +5,7 @@ import { unwrap, useLoad } from '../lib/hooks'
 import { formatDateTime, formatDuration } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
 import { tick } from '../lib/haptics'
+import { useToast } from '../components/toast'
 import { Err, Header } from '../components/ui'
 
 export default function Tools() {
@@ -35,6 +36,7 @@ interface Kick { id: string; started_at: string; ended_at: string | null; count:
 
 function Kicks() {
   const { coupleId } = useApp()
+  const toast = useToast()
   const [err, setErr] = useState<string | null>(null)
   const fetchAll = useCallback(
     async () => unwrap(await supabase.from('kick_sessions').select('id, started_at, ended_at, count').eq('couple_id', coupleId).order('started_at', { ascending: false }).limit(20)) as Kick[],
@@ -56,9 +58,17 @@ function Kicks() {
     setErr(error ? errMsg(error) : null)
     void reload()
   }
+  async function untap() {
+    if (!active || active.count === 0) return
+    tick(8)
+    const { error } = await supabase.from('kick_sessions').update({ count: active.count - 1 }).eq('id', active.id)
+    setErr(error ? errMsg(error) : null)
+    void reload()
+  }
   async function stop() {
     if (!active) return
     await supabase.from('kick_sessions').update({ ended_at: new Date().toISOString() }).eq('id', active.id)
+    toast(`Sessão guardada: ${active.count} movimentos`)
     void reload()
   }
 
@@ -78,7 +88,10 @@ function Kicks() {
           </motion.div>
           <p className="center muted">{formatDuration(now - new Date(active.started_at).getTime())}</p>
           <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={tap}>Mexeu!</motion.button>
-          <button className="btn secondary" onClick={stop}>Terminar sessão</button>
+          <div className="inline">
+            <button className="btn secondary" style={{ flex: 1 }} onClick={untap} disabled={active.count === 0}>Anular último</button>
+            <button className="btn secondary" style={{ flex: 1 }} onClick={stop}>Terminar sessão</button>
+          </div>
         </>
       ) : (
         <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={start}>Iniciar sessão</motion.button>
@@ -119,9 +132,10 @@ function Contractions() {
     setErr(error ? errMsg(error) : null)
     void reload()
   }
+  const [confirmClear, setConfirmClear] = useState(false)
   async function clear() {
-    if (!confirm('Apagar todo o histórico de contrações?')) return
     await supabase.from('contractions').delete().eq('couple_id', coupleId)
+    setConfirmClear(false)
     void reload()
   }
 
@@ -151,7 +165,16 @@ function Contractions() {
           <span className="chip">{gap != null ? `intervalo ${formatDuration(gap)}` : 'primeira'}</span>
         </div>
       ))}
-      {data.length > 0 && <button className="link danger" onClick={clear}>Limpar histórico</button>}
+      {data.length > 0 && !confirmClear && <button className="link danger" onClick={() => setConfirmClear(true)}>Limpar histórico</button>}
+      {confirmClear && (
+        <div className="card stack" role="alertdialog" aria-label="Confirmar limpeza">
+          <p>Apagar todas as contrações? Isto não se pode desfazer.</p>
+          <div className="inline">
+            <button className="btn secondary" style={{ flex: 1 }} onClick={() => setConfirmClear(false)}>Cancelar</button>
+            <button className="btn" style={{ flex: 1 }} onClick={clear}>Apagar tudo</button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

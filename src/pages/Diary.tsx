@@ -6,6 +6,7 @@ import { progress } from '../lib/pregnancy'
 import { Heart, MoonStars, Smiley, SmileyMeh, SmileyNervous, SmileySad } from '@phosphor-icons/react'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
 import { Rise } from '../components/motion'
+import { useToast } from '../components/toast'
 
 interface Entry {
   id: string
@@ -27,13 +28,14 @@ const MOODS = [
 
 function MoodIcon({ mood }: { mood: string | null }) {
   const m = MOODS.find((x) => x.key === mood)
-  return m ? <m.Icon size={20} weight="duotone" aria-label={m.label} /> : null
+  return m ? <m.Icon size={20} weight="duotone" role="img" aria-label={`Humor: ${m.label}`} /> : null
 }
 
 export default function Diary() {
   const { coupleId, dueDate } = useApp()
   const current = progress(dueDate).currentWeek
   const [editing, setEditing] = useState<{ week: number; entry?: Entry } | null>(null)
+  const toast = useToast()
 
   const fetchAll = useCallback(
     async () => unwrap(await supabase.from('diary_entries').select('*').eq('couple_id', coupleId).order('week', { ascending: false })) as Entry[],
@@ -75,7 +77,7 @@ export default function Diary() {
           entry={editing.entry}
           coupleId={coupleId}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void reload() }}
+          onSaved={() => { toast(`Semana ${editing.week} guardada`); setEditing(null); void reload() }}
         />
       )}
     </>
@@ -157,7 +159,7 @@ function EditEntry({ week, entry, coupleId, onClose, onSaved }: { week: number; 
         <input aria-label="Peso em kg" inputMode="decimal" placeholder="Peso em kg (opcional)" value={weight} onChange={(e) => setWeight(e.target.value)} />
         <textarea aria-label="Notas" rows={4} placeholder="Notas" value={note} onChange={(e) => setNote(e.target.value)} />
         <Err msg={err} />
-        <button className="btn" disabled={busy} onClick={save}>Guardar</button>
+        <button className="btn" disabled={busy} onClick={save}>{busy ? 'A guardar…' : 'Guardar'}</button>
       </div>
     </Sheet>
   )

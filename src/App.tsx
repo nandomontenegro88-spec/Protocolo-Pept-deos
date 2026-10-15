@@ -9,6 +9,7 @@ import CouplePage from './pages/Couple'
 import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import { PageSkeleton } from './components/ui'
+import { ToastProvider } from './components/toast'
 
 // Só o Início vem no pacote inicial; as restantes páginas carregam a pedido.
 const loaders = {
@@ -25,12 +26,12 @@ const Names = lazy(loaders.names)
 const Tools = lazy(loaders.tools)
 
 const TABS = [
-  { id: 'home', label: 'Início', icon: House, el: Home },
-  { id: 'appt', label: 'Consultas', icon: CalendarCheck, el: Appointments },
-  { id: 'diary', label: 'Diário', icon: Camera, el: Diary },
-  { id: 'lists', label: 'Listas', icon: ListChecks, el: Lists },
-  { id: 'names', label: 'Nomes', icon: ChatsCircle, el: Names },
-  { id: 'tools', label: 'Ferramentas', icon: Timer, el: Tools },
+  { id: 'home', label: 'Início', icon: House, el: Home, hue: 'gold' },
+  { id: 'appt', label: 'Consultas', icon: CalendarCheck, el: Appointments, hue: 'sky' },
+  { id: 'diary', label: 'Diário', icon: Camera, el: Diary, hue: 'coral' },
+  { id: 'lists', label: 'Listas', icon: ListChecks, el: Lists, hue: 'mint' },
+  { id: 'names', label: 'Nomes', icon: ChatsCircle, el: Names, hue: 'lilac' },
+  { id: 'tools', label: 'Ferramentas', icon: Timer, el: Tools, hue: 'sun' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -43,8 +44,7 @@ interface CoupleState {
 }
 
 export default function App() {
-  if (!configured) return <Setup />
-  return <Authed />
+  return <div className="bebe">{configured ? <Authed /> : <Setup />}</div>
 }
 
 function Setup() {
@@ -75,11 +75,16 @@ function Authed() {
 
 function WithSession({ userId }: { userId: string }) {
   const [state, setState] = useState<CoupleState | null | undefined>(undefined)
-  const [tab, setTab] = useState<TabId>('home')
+  const [tab, setTab] = useState<TabId>(() => {
+    const h = window.location.hash.slice(1)
+    return (TABS.find((t) => t.id === h)?.id ?? 'home') as TabId
+  })
   const [dir, setDir] = useState(1)
   const go = (id: TabId) => {
     setDir(TABS.findIndex((t) => t.id === id) > TABS.findIndex((t) => t.id === tab) ? 1 : -1)
     setTab(id)
+    // o separador fica no endereço: atualizar a página ou partilhar o link mantém o sítio
+    history.replaceState(history.state, '', `#${id}`)
   }
 
   const load = useCallback(async () => {
@@ -133,11 +138,13 @@ function WithSession({ userId }: { userId: string }) {
       await supabase.auth.signOut()
     },
   }
-  const Page = TABS.find((t) => t.id === tab)!.el
+  const current = TABS.find((t) => t.id === tab)!
+  const Page = current.el
 
   return (
     <Ctx.Provider value={ctx}>
-      <main className="page">
+      <ToastProvider>
+      <main className="page" data-hue={current.hue}>
         {/* A página entra do lado para onde a aba está na barra e sai pelo lado oposto. */}
         <AnimatePresence mode="wait" initial={false} custom={dir}>
           <motion.div
@@ -159,19 +166,21 @@ function WithSession({ userId }: { userId: string }) {
           </motion.div>
         </AnimatePresence>
       </main>
-      <nav className="tabbar">
+      <nav className="tabbar" data-hue={current.hue} aria-label="Secções">
         {TABS.map((t) => (
           <button
             key={t.id}
             className={t.id === tab ? 'on' : ''}
             aria-current={t.id === tab ? 'page' : undefined}
+            aria-label={t.label}
             onClick={() => go(t.id)}
           >
             <t.icon size={24} weight={t.id === tab ? 'fill' : 'regular'} aria-hidden />
-            {t.label}
+            <span className="lbl">{t.label}</span>
           </button>
         ))}
       </nav>
+      </ToastProvider>
     </Ctx.Provider>
   )
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useDragControls } from 'motion/react'
 import { X } from '@phosphor-icons/react'
 
@@ -19,11 +19,54 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const [open, setOpen] = useState(true)
   const close = useCallback(() => setOpen(false), [])
   const controls = useDragControls()
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Teclado: Esc fecha e o Tab fica preso dentro da folha.
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    const k = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return close()
+      if (e.key !== 'Tab' || !ref.current) return
+      const f = ref.current.querySelectorAll<HTMLElement>('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])')
+      if (!f.length) return
+      const first = f[0]
+      const last = f[f.length - 1]
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
   }, [close])
+
+  // Foco: entra na folha ao abrir e volta ao elemento de origem ao fechar.
+  useEffect(() => {
+    const origin = document.activeElement as HTMLElement | null
+    ref.current?.focus()
+    return () => origin?.focus?.()
+  }, [])
+
+  // Voltar (gesto, botão do Android): fecha a folha em vez de sair da página.
+  // A entrada de histórico só é criada depois de o React confirmar a montagem (evita
+  // entradas duplicadas no StrictMode) e não se confia no history.state, que o router reescreve.
+  useEffect(() => {
+    let pushed = false
+    let popped = false
+    const id = window.setTimeout(() => {
+      history.pushState(history.state, '')
+      pushed = true
+    }, 0)
+    const onPop = () => {
+      if (!pushed) return
+      popped = true
+      setOpen(false)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.clearTimeout(id)
+      window.removeEventListener('popstate', onPop)
+      if (pushed && !popped) history.back()
+    }
+  }, [])
+
   return (
     <AnimatePresence onExitComplete={onClose}>
       {open && (
@@ -37,6 +80,8 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         >
           <motion.div
             className="sheet"
+            ref={ref}
+            tabIndex={-1}
             role="dialog"
             aria-modal="true"
             aria-label={title}

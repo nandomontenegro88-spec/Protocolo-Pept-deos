@@ -184,3 +184,15 @@ html,body{background:#0d1130;margin:0;overscroll-behavior-y:none}
 @media (max-width:360px){
   .hero-moon{grid-template-columns:110px 1fr}.moon{width:110px;height:110px}.weeknum{font-size:4rem}
 }
+
+/* avisos */
+.toasts{position:fixed;z-index:40;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom));width:calc(100% - 32px);max-width:480px;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--ink);color:var(--bg);border-radius:20px;padding:12px 12px 12px 18px;font-weight:600;box-shadow:var(--shadow)}
+.toast-action{background:none;border:0;color:inherit;font:800 .95rem var(--display);text-decoration:underline;text-underline-offset:3px;min-height:44px;min-width:56px;padding:0 10px;border-radius:14px;cursor:pointer}
+.sheet:focus{outline:none}
+.pw{position:relative}.pw input{padding-right:56px}
+.pw .icon-btn{position:absolute;right:2px;top:2px}
+.empty{text-align:center;padding:28px 12px}
+.empty svg{display:block;margin:0 auto 8px;color:var(--hue)}
+.edit-input{min-height:44px;flex:1}
+.ghost{background:none;border:1.5px dashed var(--rule);box-shadow:none}

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { weekInfo } from '../data/weeks'
 import { Header, Skeleton } from '../components/ui'
 import { Rise, ease } from '../components/motion'
+import { useToast } from '../components/toast'
 
 interface Appt { id: string; title: string; kind: string; starts_at: string }
 
@@ -46,6 +47,7 @@ export default function Home() {
   const p = progress(dueDate)
   const w = weekInfo(p.currentWeek)
   const [editing, setEditing] = useState(false)
+  const toast = useToast()
 
   const fetchNext = useCallback(
     async () =>
@@ -139,7 +141,9 @@ export default function Home() {
               aria-label="Data prevista do parto"
               type="date"
               defaultValue={dueDate}
-              onChange={(e) => e.target.value && void setDueDate(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value) void setDueDate(e.target.value).then(() => toast('Data prevista atualizada'))
+              }}
             />
           )}
         </section>

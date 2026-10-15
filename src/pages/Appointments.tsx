@@ -6,6 +6,7 @@ import { errMsg, supabase } from '../lib/supabase'
 import { Paperclip, Plus, X } from '@phosphor-icons/react'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
 import { Rise } from '../components/motion'
+import { useToast, useUndoable } from '../components/toast'
 
 interface Appt {
   id: string
@@ -24,6 +25,9 @@ export default function Appointments() {
   const { coupleId } = useApp()
   const [adding, setAdding] = useState(false)
   const [open, setOpen] = useState<Appt | null>(null)
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const undoable = useUndoable()
+  const toast = useToast()
 
   const fetchAll = useCallback(
     async () =>
@@ -32,8 +36,34 @@ export default function Appointments() {
   )
   const { data, reload, error, loading } = useLoad(fetchAll, [] as Appt[])
   const now = new Date().toISOString()
-  const upcoming = data.filter((a) => a.starts_at >= now)
-  const past = data.filter((a) => a.starts_at < now).reverse()
+  const shown = data.filter((a) => !hidden.has(a.id))
+  const upcoming = shown.filter((a) => a.starts_at >= now)
+  const past = shown.filter((a) => a.starts_at < now).reverse()
+  const setHide = (id: string, on: boolean) =>
+    setHidden((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  const removeAppt = (a: Appt) => {
+    setOpen(null)
+    undoable(`"${a.title}" apagada`, {
+      hide: () => setHide(a.id, true),
+      restore: () => setHide(a.id, false),
+      commit: async () => {
+        // apaga também os ficheiros do armazenamento privado
+        const { data: fs } = await supabase.from('files').select('id, path').eq('appointment_id', a.id)
+        if (fs?.length) {
+          await supabase.storage.from('private').remove(fs.map((f) => f.path))
+          await supabase.from('files').delete().in('id', fs.map((f) => f.id))
+        }
+        await supabase.from('appointments').delete().eq('id', a.id)
+        await reload()
+        setHide(a.id, false)
+      },
+    })
+  }
 
   return (
     <>
@@ -41,13 +71,19 @@ export default function Appointments() {
       <Err msg={error} />
       {loading && <PageSkeleton rows={3} />}
       <h3 className="section">Próximas</h3>
-      {!loading && upcoming.length === 0 && <p className="muted">Sem marcações. Toca em Novo para adicionar a próxima consulta ou ecografia.</p>}
+      {!loading && upcoming.length === 0 && (
+        <div className="card empty ghost">
+          <p>Sem marcações à vista.</p>
+          <p className="muted">Junta a próxima consulta, ecografia ou análises, e leva as perguntas preparadas.</p>
+          <button className="btn small" onClick={() => setAdding(true)}>Adicionar marcação</button>
+        </div>
+      )}
       {upcoming.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
       {past.length > 0 && <h3 className="section">Anteriores</h3>}
       {past.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
 
-      {adding && <AddAppt onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload() }} />}
-      {open && <Detail a={open} onClose={() => { setOpen(null); void reload() }} />}
+      {adding && <AddAppt onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload(); toast('Marcação adicionada') }} />}
+      {open && <Detail a={open} onClose={() => { setOpen(null); void reload() }} onDelete={removeAppt} />}
     </>
   )
 }
@@ -113,8 +149,12 @@ function AddAppt({ onClose, onSaved }: { onClose: () => void; onSaved: () => voi
   )
 }
 
-function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
+function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDelete: (a: Appt) => void }) {
   const { coupleId } = useApp()
+  const toast = useToast()
+  const undoable = useUndoable()
+  const [hiddenQ, setHiddenQ] = useState<Set<string>>(new Set())
+  const [hiddenF, setHiddenF] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState(a.post_notes ?? '')
   const [q, setQ] = useState('')
   const [err, setErr] = useState<string | null>(null)
@@ -141,13 +181,27 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
     await supabase.from('appointment_questions').update({ done: !x.done }).eq('id', x.id)
     void questions.reload()
   }
-  async function delQ(x: Question) {
-    await supabase.from('appointment_questions').delete().eq('id', x.id)
-    void questions.reload()
-  }
+  const toggleSet = (set: React.Dispatch<React.SetStateAction<Set<string>>>, id: string, on: boolean) =>
+    set((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
+  const delQ = (x: Question) =>
+    undoable('Pergunta apagada', {
+      hide: () => toggleSet(setHiddenQ, x.id, true),
+      restore: () => toggleSet(setHiddenQ, x.id, false),
+      commit: async () => {
+        await supabase.from('appointment_questions').delete().eq('id', x.id)
+        await questions.reload()
+        toggleSet(setHiddenQ, x.id, false)
+      },
+    })
   async function saveNotes() {
     const { error } = await supabase.from('appointments').update({ post_notes: notes.trim() || null }).eq('id', a.id)
     setErr(error ? errMsg(error) : null)
+    if (!error) toast('Notas guardadas')
   }
   async function upload(f: File | undefined) {
     if (!f) return
@@ -156,6 +210,7 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
       const { error } = await supabase.from('files').insert({ couple_id: coupleId, appointment_id: a.id, path, name: f.name, content_type: f.type })
       if (error) throw error
       void files.reload()
+      toast('Ficheiro guardado')
     } catch (e) {
       setErr(errMsg(e))
     }
@@ -164,26 +219,27 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
     const url = await signedUrl(f.path)
     if (url) window.open(url, '_blank', 'noopener')
   }
-  async function delFile(f: FileRow) {
-    await supabase.storage.from('private').remove([f.path])
-    await supabase.from('files').delete().eq('id', f.id)
-    void files.reload()
-  }
-  async function delAppt() {
-    if (!confirm('Apagar esta marcação?')) return
-    await supabase.from('appointments').delete().eq('id', a.id)
-    onClose()
-  }
+  const delFile = (f: FileRow) =>
+    undoable(`"${f.name}" apagado`, {
+      hide: () => toggleSet(setHiddenF, f.id, true),
+      restore: () => toggleSet(setHiddenF, f.id, false),
+      commit: async () => {
+        await supabase.storage.from('private').remove([f.path])
+        await supabase.from('files').delete().eq('id', f.id)
+        await files.reload()
+        toggleSet(setHiddenF, f.id, false)
+      },
+    })
 
   return (
     <Sheet title={a.title} onClose={onClose}>
       <p className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</p>
 
       <h3 className="section">Perguntas para levar</h3>
-      {questions.data.map((x) => (
+      {questions.data.filter((x) => !hiddenQ.has(x.id)).map((x) => (
         <div key={x.id} className="row">
           <label className="check"><input type="checkbox" checked={x.done} onChange={() => toggleQ(x)} /> <span className={x.done ? 'done' : ''}>{x.text}</span></label>
-          <button className="icon-btn" onClick={() => delQ(x)} aria-label="Apagar"><X size={18} /></button>
+          <button className="icon-btn" onClick={() => delQ(x)} aria-label={`Apagar pergunta: ${x.text}`}><X size={18} /></button>
         </div>
       ))}
       <div className="inline">
@@ -195,10 +251,10 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
       <textarea aria-label="Notas pós-consulta" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={saveNotes} placeholder="O que foi dito, valores, próximos passos…" />
 
       <h3 className="section">Ecografias e documentos</h3>
-      {files.data.map((f) => (
+      {files.data.filter((f) => !hiddenF.has(f.id)).map((f) => (
         <div key={f.id} className="row">
           <button className="link" onClick={() => openFile(f)}><Paperclip size={16} aria-hidden /> {f.name}</button>
-          <button className="icon-btn" onClick={() => delFile(f)} aria-label="Apagar"><X size={18} /></button>
+          <button className="icon-btn" onClick={() => delFile(f)} aria-label={`Apagar ficheiro: ${f.name}`}><X size={18} /></button>
         </div>
       ))}
       <label className="btn secondary small">
@@ -206,7 +262,7 @@ function Detail({ a, onClose }: { a: Appt; onClose: () => void }) {
         <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = '' }} />
       </label>
       <Err msg={err} />
-      <button className="link danger" onClick={delAppt}>Apagar marcação</button>
+      <button className="link danger" onClick={() => onDelete(a)}>Apagar marcação</button>
     </Sheet>
   )
 }
