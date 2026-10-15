@@ -7,6 +7,7 @@ import { Paperclip, Plus, X } from '@phosphor-icons/react'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
 import { Rise } from '../components/motion'
 import { useToast, useUndoable } from '../components/toast'
+import { SwipeRow } from '../components/swipe'
 
 interface Appt {
   id: string
@@ -25,6 +26,7 @@ export default function Appointments() {
   const { coupleId } = useApp()
   const [adding, setAdding] = useState(false)
   const [open, setOpen] = useState<Appt | null>(null)
+  const [editing, setEditing] = useState<Appt | null>(null)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
   const undoable = useUndoable()
   const toast = useToast()
@@ -78,51 +80,63 @@ export default function Appointments() {
           <button className="btn small" onClick={() => setAdding(true)}>Adicionar marcação</button>
         </div>
       )}
-      {upcoming.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
+      {upcoming.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} onEdit={() => setEditing(a)} onDelete={() => removeAppt(a)} /></Rise>)}
       {past.length > 0 && <h3 className="section">Anteriores</h3>}
-      {past.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} /></Rise>)}
+      {past.map((a, i) => <Rise key={a.id} i={i}><ApptRow a={a} onClick={() => setOpen(a)} onEdit={() => setEditing(a)} onDelete={() => removeAppt(a)} /></Rise>)}
 
+      {editing && <AddAppt appt={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void reload(); toast('Marcação atualizada') }} />}
       {adding && <AddAppt onClose={() => setAdding(false)} onSaved={() => { setAdding(false); void reload(); toast('Marcação adicionada') }} />}
       {open && <Detail a={open} onClose={() => { setOpen(null); void reload() }} onDelete={removeAppt} />}
     </>
   )
 }
 
-function ApptRow({ a, onClick }: { a: Appt; onClick: () => void }) {
+function ApptRow({ a, onClick, onEdit, onDelete }: { a: Appt; onClick: () => void; onEdit: () => void; onDelete: () => void }) {
   return (
-    <button className="card tint row left" onClick={onClick}>
-      <div>
-        <strong>{a.title}</strong>
-        <div className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</div>
-      </div>
-      <span className="chip">{KINDS[a.kind]}</span>
-    </button>
+    <SwipeRow
+      actions={[
+        { key: 'edit', label: 'Editar', onClick: onEdit },
+        { key: 'delete', label: 'Apagar', onClick: onDelete },
+      ]}
+    >
+      <button className="card tint row left" onClick={onClick}>
+        <div>
+          <strong>{a.title}</strong>
+          <div className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</div>
+        </div>
+        <span className="chip">{KINDS[a.kind]}</span>
+      </button>
+    </SwipeRow>
   )
 }
 
-function AddAppt({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+/** ISO (UTC) para o formato de <input type="datetime-local"> na hora local. */
+function toLocalInput(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function AddAppt({ appt, onClose, onSaved }: { appt?: Appt; onClose: () => void; onSaved: () => void }) {
   const { coupleId } = useApp()
-  const [kind, setKind] = useState<Appt['kind']>('consulta')
-  const [title, setTitle] = useState('')
-  const [when, setWhen] = useState('')
-  const [location, setLocation] = useState('')
+  const [kind, setKind] = useState<Appt['kind']>(appt?.kind ?? 'consulta')
+  const [title, setTitle] = useState(appt?.title ?? '')
+  const [when, setWhen] = useState(appt ? toLocalInput(appt.starts_at) : '')
+  const [location, setLocation] = useState(appt?.location ?? '')
   const [err, setErr] = useState<string | null>(null)
 
   async function save() {
     if (!title.trim() || !when) return setErr('Preenche o título e a data.')
-    const { error } = await supabase.from('appointments').insert({
-      couple_id: coupleId,
-      kind,
-      title: title.trim(),
-      starts_at: new Date(when).toISOString(),
-      location: location.trim() || null,
-    })
+    const row = { kind, title: title.trim(), starts_at: new Date(when).toISOString(), location: location.trim() || null }
+    const { error } = appt
+      ? await supabase.from('appointments').update(row).eq('id', appt.id)
+      : await supabase.from('appointments').insert({ couple_id: coupleId, ...row })
     if (error) setErr(errMsg(error))
     else onSaved()
   }
 
   return (
-    <Sheet title="Nova marcação" onClose={onClose}>
+    <Sheet title={appt ? "Editar marcação" : "Nova marcação"} onClose={onClose}>
       <div className="stack">
         <label className="field">
           <span>Tipo</span>

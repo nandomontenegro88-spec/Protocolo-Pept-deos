@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
-import { ListChecks, Plus, X } from '@phosphor-icons/react'
+import { ListChecks, Plus } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
@@ -8,6 +8,7 @@ import { LISTS, type ListKey } from '../data/suggestions'
 import { Err, Header, Skeleton } from '../components/ui'
 import { ListRow } from '../components/motion'
 import { useUndoable } from '../components/toast'
+import { SwipeRow } from '../components/swipe'
 
 interface Item { id: string; title: string; assignee: string | null; done: boolean }
 
@@ -83,9 +84,17 @@ export default function Lists() {
         </div>
       )}
 
+      {visible.length > 0 && <p className="hint">Desliza uma linha para a esquerda para editar ou apagar.</p>}
       <AnimatePresence initial={false}>
       {visible.map((i) => (
-        <ListRow key={i.id} className="card tint item">
+        <ListRow key={i.id}>
+          <SwipeRow
+            className="card tint item"
+            actions={[
+              { key: 'edit', label: 'Editar', onClick: () => setEditId(i.id) },
+              { key: 'delete', label: 'Apagar', onClick: () => remove(i) },
+            ]}
+          >
           <label className="hit">
             <input type="checkbox" aria-label={`Feito: ${i.title}`} checked={i.done} onChange={() => run(supabase.from('list_items').update({ done: !i.done }).eq('id', i.id))} />
           </label>
@@ -114,7 +123,7 @@ export default function Lists() {
             <option value="">Ninguém</option>
             {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
           </select>
-          <button className="icon-btn" aria-label={`Apagar: ${i.title}`} onClick={() => remove(i)}><X size={18} /></button>
+          </SwipeRow>
         </ListRow>
       ))}
       </AnimatePresence>

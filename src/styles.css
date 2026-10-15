@@ -196,3 +196,14 @@ html,body{background:#0d1130;margin:0;overscroll-behavior-y:none}
 .empty svg{display:block;margin:0 auto 8px;color:var(--hue)}
 .edit-input{min-height:44px;flex:1}
 .ghost{background:none;border:1.5px dashed var(--rule);box-shadow:none}
+
+/* linha deslizante (estilo iOS) */
+.swipe{position:relative;overflow:hidden;border-radius:24px;box-shadow:var(--shadow);width:100%}
+.swipe-row{position:relative;touch-action:pan-y;background:var(--panel)}
+.swipe .card{box-shadow:none;border-radius:0;width:100%}
+.swipe-actions{position:absolute;top:0;right:0;bottom:0;display:flex}
+.swipe-btn{border:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font:700 .8rem var(--display);color:var(--on-gold);cursor:pointer;transition:filter .1s}
+.swipe-btn:active{filter:brightness(.9)}
+.swipe-btn.edit{background:var(--sky)}
+.swipe-btn.delete{background:var(--coral)}
+.hint{font-size:.88rem;color:var(--muted);text-align:center;margin:2px 0 0}

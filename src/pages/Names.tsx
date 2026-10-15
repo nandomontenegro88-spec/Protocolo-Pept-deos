@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Heart, Plus, Question, ThumbsDown, ThumbsUp, X } from '@phosphor-icons/react'
+import { Heart, Plus, Question, ThumbsDown, ThumbsUp } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
 import { Err, Header } from '../components/ui'
 import { useUndoable } from '../components/toast'
+import { SwipeRow } from '../components/swipe'
 import { tick } from '../lib/haptics'
 import { ListRow } from '../components/motion'
 
@@ -25,6 +26,7 @@ export default function Names() {
   const [name, setName] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const [editId, setEditId] = useState<string | null>(null)
   const undoable = useUndoable()
 
   const fetchNames = useCallback(
@@ -77,6 +79,15 @@ export default function Names() {
         setHide(n.id, false)
       },
     })
+  const rename = async (n: NameRow, value: string) => {
+    setEditId(null)
+    const v = value.trim()
+    if (!v || v === n.name) return
+    const { error } = await supabase.from('baby_names').update({ name: v }).eq('id', n.id)
+    setErr(error ? (error.code === '23505' ? 'Esse nome já está na lista.' : errMsg(error)) : null)
+    void names.reload()
+    void matches.reload()
+  }
   const shown = names.data.filter((n) => !hidden.has(n.id))
 
   return (
@@ -95,6 +106,7 @@ export default function Names() {
             <button className="btn small" aria-label="Adicionar nome"><Plus size={18} weight="bold" /></button>
           </form>
           <Err msg={err} />
+          {shown.length > 0 && <p className="hint">Desliza um nome para a esquerda para editar ou apagar.</p>}
           <AnimatePresence initial={false}>
           {!names.loading && shown.length === 0 && (
             <div className="card empty">
@@ -104,10 +116,30 @@ export default function Names() {
             </div>
           )}
           {shown.map((n) => (
-            <ListRow key={n.id} className="card">
+            <ListRow key={n.id}>
+              <SwipeRow
+                className="card"
+                actions={[
+                  { key: 'edit', label: 'Editar', onClick: () => setEditId(n.id) },
+                  { key: 'delete', label: 'Apagar', onClick: () => remove(n) },
+                ]}
+              >
               <div className="row">
-                <strong className="name">{n.name}</strong>
-                <button className="icon-btn" aria-label={`Apagar: ${n.name}`} onClick={() => remove(n)}><X size={18} /></button>
+                {editId === n.id ? (
+                  <input
+                    className="edit-input name"
+                    aria-label="Editar nome"
+                    defaultValue={n.name}
+                    autoFocus
+                    onBlur={(e) => void rename(n, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.currentTarget.blur()
+                      if (e.key === 'Escape') setEditId(null)
+                    }}
+                  />
+                ) : (
+                  <strong className="name">{n.name}</strong>
+                )}
               </div>
               <div className="votes">
                 {VOTES.map(({ v, label, Icon }) => (
@@ -122,6 +154,7 @@ export default function Names() {
                   </button>
                 ))}
               </div>
+              </SwipeRow>
             </ListRow>
           ))}
           </AnimatePresence>

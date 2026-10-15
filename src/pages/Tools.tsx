@@ -5,7 +5,8 @@ import { unwrap, useLoad } from '../lib/hooks'
 import { formatDateTime, formatDuration } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
 import { tick } from '../lib/haptics'
-import { useToast } from '../components/toast'
+import { useToast, useUndoable } from '../components/toast'
+import { SwipeRow } from '../components/swipe'
 import { Err, Header } from '../components/ui'
 
 export default function Tools() {
@@ -37,6 +38,15 @@ interface Kick { id: string; started_at: string; ended_at: string | null; count:
 function Kicks() {
   const { coupleId } = useApp()
   const toast = useToast()
+  const undoable = useUndoable()
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const setHide = (id: string, on: boolean) =>
+    setHidden((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
   const [err, setErr] = useState<string | null>(null)
   const fetchAll = useCallback(
     async () => unwrap(await supabase.from('kick_sessions').select('id, started_at, ended_at, count').eq('couple_id', coupleId).order('started_at', { ascending: false }).limit(20)) as Kick[],
@@ -98,14 +108,34 @@ function Kicks() {
       )}
       <Err msg={err} />
       <h3 className="section">Histórico</h3>
-      {data.filter((s) => s.ended_at).map((s) => (
-        <div key={s.id} className="card row">
-          <div>
-            <strong>{s.count} movimentos</strong>
-            <div className="muted">{formatDateTime(s.started_at)}</div>
+      {data.filter((s) => s.ended_at && !hidden.has(s.id)).map((s) => (
+        <SwipeRow
+          key={s.id}
+          actions={[
+            {
+              key: 'delete',
+              label: 'Apagar',
+              onClick: () =>
+                undoable('Sessão apagada', {
+                  hide: () => setHide(s.id, true),
+                  restore: () => setHide(s.id, false),
+                  commit: async () => {
+                    await supabase.from('kick_sessions').delete().eq('id', s.id)
+                    await reload()
+                    setHide(s.id, false)
+                  },
+                }),
+            },
+          ]}
+        >
+          <div className="card row">
+            <div>
+              <strong>{s.count} movimentos</strong>
+              <div className="muted">{formatDateTime(s.started_at)}</div>
+            </div>
+            <span className="chip">{formatDuration(new Date(s.ended_at!).getTime() - new Date(s.started_at).getTime())}</span>
           </div>
-          <span className="chip">{formatDuration(new Date(s.ended_at!).getTime() - new Date(s.started_at).getTime())}</span>
-        </div>
+        </SwipeRow>
       ))}
     </>
   )
@@ -115,6 +145,15 @@ interface Contraction { id: string; started_at: string; ended_at: string | null 
 
 function Contractions() {
   const { coupleId } = useApp()
+  const undoable = useUndoable()
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
+  const setHide = (id: string, on: boolean) =>
+    setHidden((s) => {
+      const n = new Set(s)
+      if (on) n.add(id)
+      else n.delete(id)
+      return n
+    })
   const [err, setErr] = useState<string | null>(null)
   const fetchAll = useCallback(
     async () => unwrap(await supabase.from('contractions').select('id, started_at, ended_at').eq('couple_id', coupleId).order('started_at', { ascending: false }).limit(30)) as Contraction[],
@@ -156,14 +195,34 @@ function Contractions() {
       <motion.button className={`bigbtn ${active ? 'stop' : ''}`} whileTap={{ scale: 0.97 }} onClick={toggle}>{active ? 'Terminou' : 'Começou'}</motion.button>
       <Err msg={err} />
       <h3 className="section">Histórico</h3>
-      {rows.filter((r) => r.c.ended_at).map(({ c, dur, gap }) => (
-        <div key={c.id} className="card row">
-          <div>
-            <strong>Duração {formatDuration(dur!)}</strong>
-            <div className="muted">{formatDateTime(c.started_at)}</div>
+      {rows.filter((r) => r.c.ended_at && !hidden.has(r.c.id)).map(({ c, dur, gap }) => (
+        <SwipeRow
+          key={c.id}
+          actions={[
+            {
+              key: 'delete',
+              label: 'Apagar',
+              onClick: () =>
+                undoable('Contração apagada', {
+                  hide: () => setHide(c.id, true),
+                  restore: () => setHide(c.id, false),
+                  commit: async () => {
+                    await supabase.from('contractions').delete().eq('id', c.id)
+                    await reload()
+                    setHide(c.id, false)
+                  },
+                }),
+            },
+          ]}
+        >
+          <div className="card row">
+            <div>
+              <strong>Duração {formatDuration(dur!)}</strong>
+              <div className="muted">{formatDateTime(c.started_at)}</div>
+            </div>
+            <span className="chip">{gap != null ? `intervalo ${formatDuration(gap)}` : 'primeira'}</span>
           </div>
-          <span className="chip">{gap != null ? `intervalo ${formatDuration(gap)}` : 'primeira'}</span>
-        </div>
+        </SwipeRow>
       ))}
       {data.length > 0 && !confirmClear && <button className="link danger" onClick={() => setConfirmClear(true)}>Limpar histórico</button>}
       {confirmClear && (
