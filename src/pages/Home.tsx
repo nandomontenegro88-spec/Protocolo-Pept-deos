@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
-import { animate, motion, useMotionValue, useTransform } from 'motion/react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react'
+import { CaretLeft, CaretRight } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { useLoad, unwrap } from '../lib/hooks'
 import { formatDate, formatDateTime, progress } from '../lib/pregnancy'
@@ -8,6 +9,9 @@ import { weekInfo } from '../data/weeks'
 import { Header, Skeleton } from '../components/ui'
 import { Rise, ease } from '../components/motion'
 import { useToast } from '../components/toast'
+
+// A biblioteca 3D só é descarregada quando o cartão do bebé aparece.
+const Baby3D = lazy(() => import('../components/Baby3D'))
 
 interface Appt { id: string; title: string; kind: string; starts_at: string }
 
@@ -45,7 +49,10 @@ function Moon({ percent }: { percent: number }) {
 export default function Home() {
   const { userId, nameOf, dueDate, coupleId, members, inviteCode, signOut, setDueDate } = useApp()
   const p = progress(dueDate)
-  const w = weekInfo(p.currentWeek)
+  const [viewWeek, setViewWeek] = useState(p.currentWeek)
+  const w = weekInfo(viewWeek)
+  const [no3d, setNo3d] = useState(false)
+  const reduce = useReducedMotion()
   const [editing, setEditing] = useState(false)
   const toast = useToast()
 
@@ -91,7 +98,26 @@ export default function Home() {
       </Rise>
 
       <Rise i={1}>
-        <section className="card tint" data-hue="coral">
+        <section className="card tint baby-card" data-hue="coral">
+          {!no3d && (
+            <div className="stage">
+              <Suspense fallback={<div className="stage-loading" aria-hidden />}>
+                <Baby3D week={Math.max(viewWeek, 4)} reducedMotion={!!reduce} onUnsupported={() => setNo3d(true)} />
+              </Suspense>
+              <div className="weekbar">
+                <button className="round" aria-label="Semana anterior" disabled={viewWeek <= 4} onClick={() => setViewWeek((x) => Math.max(4, x - 1))}>
+                  <CaretLeft size={20} weight="bold" aria-hidden />
+                </button>
+                <button className="weekpill" onClick={() => setViewWeek(p.currentWeek)} aria-label={viewWeek === p.currentWeek ? `Semana ${viewWeek}, a semana de hoje` : `Semana ${viewWeek}. Tocar para voltar a hoje`}>
+                  <span>Semana {viewWeek}</span>
+                  {viewWeek === p.currentWeek ? <em>hoje</em> : <em className="back">voltar a hoje</em>}
+                </button>
+                <button className="round" aria-label="Semana seguinte" disabled={viewWeek >= 40} onClick={() => setViewWeek((x) => Math.min(40, x + 1))}>
+                  <CaretRight size={20} weight="bold" aria-hidden />
+                </button>
+              </div>
+            </div>
+          )}
           <div className="fruit">
             <div className="sticker" aria-hidden>{w.emoji}</div>
             <div>
@@ -103,6 +129,7 @@ export default function Home() {
             </div>
           </div>
           <p>{w.text}</p>
+          {!no3d && <p className="disclaimer">Ilustração estilizada para dar uma ideia do tamanho e da forma. Não é uma imagem médica.</p>}
         </section>
       </Rise>
 
