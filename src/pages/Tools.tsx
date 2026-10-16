@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { motion } from 'motion/react'
+import { Timer } from '@phosphor-icons/react'
+import { motion, useReducedMotion } from 'motion/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { formatDateTime, formatDuration } from '../lib/pregnancy'
@@ -10,15 +11,16 @@ import { SwipeRow } from '../components/swipe'
 import { Err, Header } from '../components/ui'
 
 export default function Tools() {
-  const [tool, setTool] = useState<'kicks' | 'contr'>('kicks')
+  const [tool, setTool] = useState<'kicks' | 'contr' | 'kegel'>('kicks')
   return (
     <>
-      <Header title="Ferramentas" />
+      <Header title="Ferramentas" icon={Timer} />
       <div className="seg">
         <button className={tool === 'kicks' ? 'on' : ''} onClick={() => setTool('kicks')}>Movimentos</button>
         <button className={tool === 'contr' ? 'on' : ''} onClick={() => setTool('contr')}>Contrações</button>
+        <button className={tool === 'kegel' ? 'on' : ''} onClick={() => setTool('kegel')}>Kegel</button>
       </div>
-      {tool === 'kicks' ? <Kicks /> : <Contractions />}
+      {tool === 'kicks' ? <Kicks /> : tool === 'contr' ? <Contractions /> : <Kegel />}
     </>
   )
 }
@@ -107,7 +109,7 @@ function Kicks() {
         <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={start}>Iniciar sessão</motion.button>
       )}
       <Err msg={err} />
-      <h3 className="section">Histórico</h3>
+      {data.some((s) => s.ended_at) && <h3 className="section">Histórico</h3>}
       {data.filter((s) => s.ended_at && !hidden.has(s.id)).map((s) => (
         <SwipeRow
           key={s.id}
@@ -194,7 +196,7 @@ function Contractions() {
       {active && <div className="counter">{formatDuration(now - new Date(active.started_at).getTime())}</div>}
       <motion.button className={`bigbtn ${active ? 'stop' : ''}`} whileTap={{ scale: 0.97 }} onClick={toggle}>{active ? 'Terminou' : 'Começou'}</motion.button>
       <Err msg={err} />
-      <h3 className="section">Histórico</h3>
+      {rows.some((r) => r.c.ended_at) && <h3 className="section">Histórico</h3>}
       {rows.filter((r) => r.c.ended_at && !hidden.has(r.c.id)).map(({ c, dur, gap }) => (
         <SwipeRow
           key={c.id}
@@ -224,7 +226,7 @@ function Contractions() {
           </div>
         </SwipeRow>
       ))}
-      {data.length > 0 && !confirmClear && <button className="link danger" onClick={() => setConfirmClear(true)}>Limpar histórico</button>}
+      {data.length > 0 && !confirmClear && <button className="cell danger" onClick={() => setConfirmClear(true)}>Limpar histórico</button>}
       {confirmClear && (
         <div className="card stack" role="alertdialog" aria-label="Confirmar limpeza">
           <p>Apagar todas as contrações? Isto não se pode desfazer.</p>
@@ -233,6 +235,83 @@ function Contractions() {
             <button className="btn" style={{ flex: 1 }} onClick={clear}>Apagar tudo</button>
           </div>
         </div>
+      )}
+    </>
+  )
+}
+
+// Planos próprios, progressivos: segundos a contrair, a relaxar e repetições.
+const KEGEL_LEVELS = [
+  { name: 'Iniciar', squeeze: 3, relax: 3, reps: 8 },
+  { name: 'Base', squeeze: 5, relax: 5, reps: 10 },
+  { name: 'Médio', squeeze: 7, relax: 5, reps: 10 },
+  { name: 'Avançado', squeeze: 10, relax: 5, reps: 12 },
+] as const
+
+function Kegel() {
+  const [lvl, setLvl] = useState(() => {
+    try {
+      return Math.min(Number(localStorage.getItem('kegel-level') ?? 0) || 0, KEGEL_LEVELS.length - 1)
+    } catch {
+      return 0
+    }
+  })
+  const L = KEGEL_LEVELS[lvl]
+  const [run, setRun] = useState<{ rep: number; phase: 'squeeze' | 'relax'; until: number } | null>(null)
+  const now = useNow(!!run)
+  const reduce = useReducedMotion()
+
+  useEffect(() => {
+    if (!run || now < run.until) return
+    if (run.phase === 'squeeze') {
+      tick(8)
+      setRun({ ...run, phase: 'relax', until: Date.now() + L.relax * 1000 })
+    } else if (run.rep + 1 < L.reps) {
+      tick(14)
+      setRun({ rep: run.rep + 1, phase: 'squeeze', until: Date.now() + L.squeeze * 1000 })
+    } else {
+      tick(30)
+      setRun(null)
+    }
+  }, [now, run, L])
+
+  function pick(i: number) {
+    setLvl(i)
+    try {
+      localStorage.setItem('kegel-level', String(i))
+    } catch {
+      /* sem armazenamento: o nível só não fica guardado */
+    }
+  }
+
+  const left = run ? Math.max(Math.ceil((run.until - now) / 1000), 0) : 0
+  return (
+    <>
+      <p className="muted">Exercícios do pavimento pélvico: contrai como se quisesses travar o xixi, sem prender a respiração, e relaxa por completo. Se sentires dor, para e fala com a tua equipa de saúde.</p>
+      <div className="seg" role="radiogroup" aria-label="Nível">
+        {KEGEL_LEVELS.map((k, i) => (
+          <button key={k.name} role="radio" aria-checked={i === lvl} className={i === lvl ? 'on' : ''} disabled={!!run} onClick={() => pick(i)}>{k.name}</button>
+        ))}
+      </div>
+      <p className="center muted">{L.reps} repetições · {L.squeeze} s a contrair · {L.relax} s a relaxar</p>
+      {run ? (
+        <>
+          <motion.div
+            className="kegel-ring"
+            animate={{ scale: run.phase === 'squeeze' && !reduce ? 0.82 : 1 }}
+            transition={{ duration: run.phase === 'squeeze' ? L.squeeze * 0.6 : L.relax * 0.6, ease: 'easeInOut' }}
+            aria-live="polite"
+          >
+            <div>
+              <strong>{left}</strong>
+              <div>{run.phase === 'squeeze' ? 'Contrai' : 'Relaxa'}</div>
+            </div>
+          </motion.div>
+          <p className="center muted">Repetição {run.rep + 1} de {L.reps}</p>
+          <button className="btn secondary" onClick={() => setRun(null)}>Parar</button>
+        </>
+      ) : (
+        <motion.button className="bigbtn" whileTap={{ scale: 0.97 }} onClick={() => setRun({ rep: 0, phase: 'squeeze', until: Date.now() + L.squeeze * 1000 })}>Começar</motion.button>
       )}
     </>
   )

@@ -10,6 +10,9 @@ import Onboarding from './pages/Onboarding'
 import Home from './pages/Home'
 import { PageSkeleton } from './components/ui'
 import { ToastProvider } from './components/toast'
+import { watchSystemTheme } from './lib/theme'
+
+watchSystemTheme()
 
 // Só o Início vem no pacote inicial; as restantes páginas carregam a pedido.
 const loaders = {
@@ -140,6 +143,7 @@ function WithSession({ userId }: { userId: string }) {
     signOut: async () => {
       await supabase.auth.signOut()
     },
+    refresh: load,
   }
   const current = TABS.find((t) => t.id === tab)!
   const Page = current.el

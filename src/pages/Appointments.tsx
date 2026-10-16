@@ -3,7 +3,8 @@ import { useApp } from '../lib/app-context'
 import { signedUrl, unwrap, uploadPrivate, useLoad } from '../lib/hooks'
 import { formatDateTime } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
-import { Paperclip, Plus, X } from '@phosphor-icons/react'
+import { BellRinging, CalendarCheck, Paperclip, Plus, X } from '@phosphor-icons/react'
+import { buildIcs, downloadIcs } from '../lib/ics'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
 import { Rise } from '../components/motion'
 import { useToast, useUndoable } from '../components/toast'
@@ -69,7 +70,12 @@ export default function Appointments() {
 
   return (
     <>
-      <Header title="Consultas" right={<button className="btn small" onClick={() => setAdding(true)}><Plus size={18} weight="bold" aria-hidden /> Novo</button>} />
+      <Header
+        title="Consultas"
+        icon={CalendarCheck}
+        sub={loading ? undefined : upcoming.length ? `${upcoming.length} ${upcoming.length === 1 ? 'marcação' : 'marcações'} por vir` : 'Sem marcações futuras'}
+        right={<button className="nav-icon" onClick={() => setAdding(true)} aria-label="Nova marcação"><Plus size={24} weight="bold" /></button>}
+      />
       <Err msg={error} />
       {loading && <PageSkeleton rows={3} />}
       <h3 className="section">Próximas</h3>
@@ -248,6 +254,22 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
   return (
     <Sheet title={a.title} onClose={onClose}>
       <p className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</p>
+      {a.starts_at > new Date().toISOString() && (
+        <button
+          className="btn secondary small"
+          onClick={() =>
+            downloadIcs(a.title, buildIcs({
+              id: a.id,
+              title: a.title,
+              start: a.starts_at,
+              location: a.location,
+              notes: questions.data.filter((x) => !x.done).map((x) => `• ${x.text}`).join('\n') || undefined,
+            }))
+          }
+        >
+          <BellRinging size={18} aria-hidden /> Lembrete no calendário
+        </button>
+      )}
 
       <h3 className="section">Perguntas para levar</h3>
       {questions.data.filter((x) => !hiddenQ.has(x.id)).map((x) => (
@@ -276,7 +298,7 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
         <input type="file" accept="image/*,application/pdf" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = '' }} />
       </label>
       <Err msg={err} />
-      <button className="link danger" onClick={() => onDelete(a)}>Apagar marcação</button>
+      <button className="cell danger" onClick={() => onDelete(a)}>Apagar marcação</button>
     </Sheet>
   )
 }

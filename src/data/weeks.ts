@@ -64,3 +64,18 @@ export const WEEKS: WeekInfo[] = rows.map(([fruit, emoji, cm, grams, text], i) =
 export function weekInfo(week: number): WeekInfo {
   return WEEKS[Math.min(Math.max(week, 1), 40) - 1]
 }
+
+// RASCUNHO para revisão: sintomas frequentes por fase, de referência geral. Nem todas sentem estes, e
+// a ausência deles não é sinal de problema.
+const COMMON: [from: number, to: number, list: string[]][] = [
+  [4, 5, ['Seios sensíveis', 'Cansaço', 'Urinar mais vezes']],
+  [6, 13, ['Enjoo', 'Cansaço', 'Seios sensíveis', 'Aversão a cheiros']],
+  [14, 20, ['Mais energia', 'Nariz entupido', 'Dores nos ligamentos da barriga']],
+  [21, 27, ['Azia', 'Dor de costas', 'Cãibras nas pernas']],
+  [28, 36, ['Azia', 'Falta de ar', 'Pés inchados', 'Contrações de treino', 'Dormir pior']],
+  [37, 42, ['Pressão na bacia', 'Contrações de treino', 'Dormir pior', 'Cansaço']],
+]
+
+export function commonSymptoms(week: number): string[] {
+  return COMMON.find(([a, b]) => week >= a && week <= b)?.[2] ?? []
+}

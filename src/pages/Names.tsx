@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Heart, Plus, Question, ThumbsDown, ThumbsUp } from '@phosphor-icons/react'
+import { ChatsCircle, Heart, Plus, Question, ThumbsDown, ThumbsUp } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
@@ -92,7 +92,7 @@ export default function Names() {
 
   return (
     <>
-      <Header title="Nomes" />
+      <Header title="Nomes" icon={ChatsCircle} />
       <div className="seg">
         <button className={tab === 'vote' ? 'on' : ''} onClick={() => setTab('vote')}>Votar</button>
         <button className={tab === 'matches' ? 'on' : ''} onClick={() => { setTab('matches'); void matches.reload() }}>Matches ({matches.data.length})</button>

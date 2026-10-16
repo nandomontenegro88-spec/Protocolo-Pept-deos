@@ -12,7 +12,7 @@ import type { MeshData } from '../baby/surfaceNets'
  * É uma ilustração: as proporções variam com a semana, mas não são uma imagem médica.
  */
 
-const CELL = 0.019 // tamanho da célula da malha: mais pequeno = mais detalhe e mais tempo de cálculo
+const CELL = 0.015 // tamanho da célula da malha: mais pequeno = mais detalhe e mais tempo de cálculo
 
 // ---------- cálculo da malha (worker + cache) ----------
 const cache = new Map<number, MeshData>()

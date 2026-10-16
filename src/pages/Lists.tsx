@@ -66,7 +66,7 @@ export default function Lists() {
 
   return (
     <>
-      <Header title="Listas" />
+      <Header title="Listas" icon={ListChecks} />
       <div className="seg">
         {(Object.keys(LISTS) as ListKey[]).map((k) => (
           <button key={k} className={k === list ? 'on' : ''} onClick={() => setList(k)}>{LISTS[k].label.split(' ')[0]}</button>
@@ -85,6 +85,7 @@ export default function Lists() {
       )}
 
       {visible.length > 0 && <p className="hint">Desliza uma linha para a esquerda para editar ou apagar.</p>}
+      <div className="group">
       <AnimatePresence initial={false}>
       {visible.map((i) => (
         <ListRow key={i.id}>
@@ -127,6 +128,7 @@ export default function Lists() {
         </ListRow>
       ))}
       </AnimatePresence>
+      </div>
 
       <form
         className="inline"

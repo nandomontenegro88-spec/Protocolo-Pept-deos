@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowCounterClockwise, Check, Drop, Fire, GearSix, Minus, PersonSimpleRun, Pill, Plus } from '@phosphor-icons/react'
+import { ArrowCounterClockwise, Check, Drop, Fire, GearSix, Minus, PersonSimpleRun, Pill, Plus, Target } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { unwrap, useLoad } from '../lib/hooks'
 import { errMsg, supabase } from '../lib/supabase'
@@ -118,10 +118,10 @@ export default function Goals() {
   if (error && !view) {
     return (
       <>
-        <Header title="Metas do dia" />
+        <Header title="Metas do dia" icon={Target} />
         <div className="card stack">
           <p>Não foi possível carregar as metas.</p>
-          <p className="muted">Se é a primeira vez, falta aplicar o ficheiro <code>supabase/migrations/0002_metas_diarias.sql</code> no Supabase.</p>
+          <p className="muted">Se é a primeira vez, falta aplicar o ficheiro <code>supabase/migrations/0004_metas_diarias.sql</code> no Supabase.</p>
           <Err msg={error} />
           <button className="btn small" onClick={() => void reload()}>Tentar de novo</button>
         </div>
@@ -234,13 +234,16 @@ export default function Goals() {
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6))
   const isComplete = (d: string) => statusFor(d).complete
+  const sequence = streak(today, isComplete, WEEKS * 7)
 
   return (
     <>
       <Header
         title="Metas do dia"
+        icon={Target}
+        sub={sequence > 0 ? `${sequence} ${sequence === 1 ? 'dia seguido' : 'dias seguidos'} com todas as metas` : 'Água, exercício e suplementos'}
         right={
-          <button className="icon-btn" aria-label="Ajustar metas" onClick={() => setSettingsOpen(true)}>
+          <button className="nav-icon" aria-label="Ajustar metas" onClick={() => setSettingsOpen(true)}>
             <GearSix size={24} aria-hidden />
           </button>
         }

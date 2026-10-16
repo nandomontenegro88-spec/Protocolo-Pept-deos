@@ -1,11 +1,11 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { animate, motion, useMotionValue, useReducedMotion, useTransform } from 'motion/react'
-import { CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { CalendarBlank, CaretLeft, CaretRight, GearSix, MoonStars } from '@phosphor-icons/react'
 import { useApp } from '../lib/app-context'
 import { useLoad, unwrap } from '../lib/hooks'
 import { formatDate, formatDateTime, progress, sinceConception } from '../lib/pregnancy'
 import { supabase } from '../lib/supabase'
-import { weekInfo } from '../data/weeks'
+import { commonSymptoms, weekInfo } from '../data/weeks'
 import { Header, Sheet, Skeleton } from '../components/ui'
 import DatingForm from '../components/DatingForm'
 import { useBabyCredit } from '../baby/manifest'
@@ -14,6 +14,7 @@ import { useToast } from '../components/toast'
 
 // A biblioteca 3D só é descarregada quando o cartão do bebé aparece.
 const Baby3D = lazy(() => import('../components/Baby3D'))
+const Settings = lazy(() => import('../components/Settings'))
 
 interface Appt { id: string; title: string; kind: string; starts_at: string }
 
@@ -49,7 +50,7 @@ function Moon({ percent }: { percent: number }) {
 }
 
 export default function Home() {
-  const { userId, nameOf, dueDate, coupleId, members, inviteCode, signOut, setPregnancy } = useApp()
+  const { userId, nameOf, dueDate, coupleId, members, inviteCode, setPregnancy } = useApp()
   const p = progress(dueDate)
   const [viewWeek, setViewWeek] = useState(p.currentWeek)
   const w = weekInfo(viewWeek)
@@ -57,6 +58,7 @@ export default function Home() {
   const credit = useBabyCredit()
   const reduce = useReducedMotion()
   const [editing, setEditing] = useState(false)
+  const [settings, setSettings] = useState(false)
   const conc = sinceConception(p)
   const toast = useToast()
 
@@ -77,7 +79,12 @@ export default function Home() {
 
   return (
     <>
-      <Header title={`Olá, ${nameOf(userId)}`} right={<button className="link" onClick={signOut}>Sair</button>} />
+      <Header
+        title={`Olá, ${nameOf(userId)}`}
+        icon={MoonStars}
+        sub={formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })}
+        right={<button className="nav-icon" onClick={() => setSettings(true)} aria-label="Ajustes"><GearSix size={24} weight="regular" /></button>}
+      />
 
       <Rise>
         <section className="hero-moon" aria-label="Semana da gravidez">
@@ -138,6 +145,12 @@ export default function Home() {
             </div>
           </div>
           <p>{w.text}</p>
+          {commonSymptoms(viewWeek).length > 0 && (
+            <div className="common">
+              <p className="muted">Comum nesta fase</p>
+              <div className="chips">{commonSymptoms(viewWeek).map((c) => <span key={c} className="chip">{c}</span>)}</div>
+            </div>
+          )}
           {!no3d && <p className="disclaimer">Ilustração para dar uma ideia do tamanho e da forma. Não é uma imagem médica.{credit ? ` ${credit}` : ''}</p>}
         </section>
       </Rise>
@@ -170,10 +183,24 @@ export default function Home() {
       )}
 
       <Rise i={4}>
-        <section className="card">
-          <button className="link" onClick={() => setEditing(true)}>Como contamos as semanas? Rever as datas</button>
-        </section>
+        <button className="cell" onClick={() => setEditing(true)}>
+          <CalendarBlank size={22} weight="duotone" aria-hidden />
+          <span className="cell-label">Rever as datas<small>Como contamos as semanas</small></span>
+          <CaretRight size={16} weight="bold" className="cell-chevron" aria-hidden />
+        </button>
       </Rise>
+      {settings && (
+        <Suspense fallback={null}>
+          <Settings
+            onClose={() => setSettings(false)}
+            onEditDates={() => {
+              // a folha dos Ajustes desmonta e devolve a entrada do histórico; só depois abre a das datas
+              setSettings(false)
+              window.setTimeout(() => setEditing(true), 350)
+            }}
+          />
+        </Suspense>
+      )}
       {editing && (
         <Sheet title="Datas da gravidez" onClose={() => setEditing(false)}>
           <p className="muted">

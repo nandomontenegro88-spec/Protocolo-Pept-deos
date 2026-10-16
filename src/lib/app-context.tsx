@@ -14,6 +14,8 @@ export interface AppCtx {
   setPregnancy: (due: string, lmp: string) => Promise<void>
   nameOf: (userId: string | null | undefined) => string
   signOut: () => Promise<void>
+  /** volta a carregar casal, membros e datas (ex.: depois de mudar o nome) */
+  refresh: () => Promise<void>
 }
 
 export const Ctx = createContext<AppCtx | null>(null)

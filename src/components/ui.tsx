@@ -1,13 +1,42 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion, useDragControls } from 'motion/react'
-import { X } from '@phosphor-icons/react'
+import { X, type Icon as PhosphorIcon } from '@phosphor-icons/react'
 
-export function Header({ title, right }: { title: string; right?: ReactNode }) {
+/**
+ * Título grande ao estilo iOS. Quando sai do ecrã, a barra de cima mostra o título pequeno
+ * sobre um material translúcido; a ação da direita vive sempre nessa barra.
+ */
+export function Header({ title, right, icon: Icon, sub }: {
+  title: string
+  right?: ReactNode
+  /** ícone da secção (Phosphor), num quadrado com a cor-joia da secção */
+  icon?: PhosphorIcon
+  /** uma linha com informação real da página (não decorativa) */
+  sub?: ReactNode
+}) {
+  const big = useRef<HTMLHeadingElement>(null)
+  const [compact, setCompact] = useState(false)
+  useEffect(() => {
+    const el = big.current
+    if (!el) return
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting), { rootMargin: '-52px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   return (
-    <header className="head">
-      <h1><span>{title}</span></h1>
-      {right}
-    </header>
+    <>
+      <div className={`navbar${compact ? ' on' : ''}`}>
+        <span className="navbar-title" aria-hidden>{title}</span>
+        <div className="navbar-right">{right}</div>
+      </div>
+      <header className="page-head">
+        {Icon && <span className="page-icon" aria-hidden><Icon size={26} weight="duotone" /></span>}
+        <div className="page-head-text">
+          <h1 className="large-title" ref={big}>{title}</h1>
+          {sub && <p className="page-sub">{sub}</p>}
+        </div>
+      </header>
+    </>
   )
 }
 
