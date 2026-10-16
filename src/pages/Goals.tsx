@@ -495,7 +495,7 @@ function History({
             )
           })}
         </div>
-        <p className="legend muted">
+        <p className="hlegend muted">
           <span><i className="sw" /> nenhuma</span>
           <span><i className="sw mid" /> parte</span>
           <span><i className="sw hi" /> todas</span>

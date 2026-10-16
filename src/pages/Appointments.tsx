@@ -3,9 +3,11 @@ import { useApp } from '../lib/app-context'
 import { signedUrl, unwrap, uploadPrivate, useLoad } from '../lib/hooks'
 import { formatDateTime } from '../lib/pregnancy'
 import { errMsg, supabase } from '../lib/supabase'
-import { BellRinging, CalendarCheck, Paperclip, Plus, X } from '@phosphor-icons/react'
+import { BellRinging, CalendarCheck, FileText, Paperclip, Plus, X } from '@phosphor-icons/react'
 import { buildIcs, downloadIcs } from '../lib/ics'
 import { Err, Header, PageSkeleton, Sheet } from '../components/ui'
+import Briefing from '../components/Briefing'
+import { PRIORITIES } from '../lib/briefing'
 import { Rise } from '../components/motion'
 import { useToast, useUndoable } from '../components/toast'
 import { SwipeRow } from '../components/swipe'
@@ -17,8 +19,10 @@ interface Appt {
   starts_at: string
   location: string | null
   post_notes: string | null
+  /** texto do briefing, gravado a partir do ecrã do briefing (migração 0005) */
+  briefing?: string | null
 }
-interface Question { id: string; text: string; done: boolean }
+interface Question { id: string; text: string; done: boolean; priority: number }
 interface FileRow { id: string; path: string; name: string; content_type: string | null }
 
 const KINDS = { consulta: 'Consulta', ecografia: 'Ecografia', analises: 'Análises', outro: 'Outro' } as const
@@ -177,12 +181,18 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
   const [hiddenF, setHiddenF] = useState<Set<string>>(new Set())
   const [notes, setNotes] = useState(a.post_notes ?? '')
   const [q, setQ] = useState('')
+  const [prio, setPrio] = useState(2)
+  const [view, setView] = useState<'detail' | 'brief'>('detail')
+  const [briefText, setBriefText] = useState<string | null>(a.briefing ?? null)
   const [err, setErr] = useState<string | null>(null)
 
-  const fetchQ = useCallback(
-    async () => unwrap(await supabase.from('appointment_questions').select('id, text, done').eq('appointment_id', a.id).order('id')) as Question[],
-    [a.id],
-  )
+  // `priority` só existe depois da migração 0005; sem ela, tudo conta como "quer perguntar"
+  const fetchQ = useCallback(async () => {
+    const sel = (cols: string) => supabase.from('appointment_questions').select(cols).eq('appointment_id', a.id).order('id')
+    let r = await sel('id, text, done, priority')
+    if (r.error) r = await sel('id, text, done')
+    return (unwrap(r) as unknown as Partial<Question>[]).map((x) => ({ priority: 2, ...x })) as Question[]
+  }, [a.id])
   const fetchF = useCallback(
     async () => unwrap(await supabase.from('files').select('id, path, name, content_type').eq('appointment_id', a.id).order('created_at')) as FileRow[],
     [a.id],
@@ -192,13 +202,21 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
 
   async function addQ() {
     if (!q.trim()) return
-    const { error } = await supabase.from('appointment_questions').insert({ couple_id: coupleId, appointment_id: a.id, text: q.trim() })
+    const row = { couple_id: coupleId, appointment_id: a.id, text: q.trim() }
+    let { error } = await supabase.from('appointment_questions').insert({ ...row, priority: prio })
+    if (error && /priority/.test(error.message)) ({ error } = await supabase.from('appointment_questions').insert(row))
     if (error) return setErr(errMsg(error))
     setQ('')
     void questions.reload()
   }
   async function toggleQ(x: Question) {
     await supabase.from('appointment_questions').update({ done: !x.done }).eq('id', x.id)
+    void questions.reload()
+  }
+  async function cyclePriority(x: Question) {
+    const next = (x.priority % 3) + 1
+    const { error } = await supabase.from('appointment_questions').update({ priority: next }).eq('id', x.id)
+    setErr(error ? errMsg(error) : null)
     void questions.reload()
   }
   const toggleSet = (set: React.Dispatch<React.SetStateAction<Set<string>>>, id: string, on: boolean) =>
@@ -237,7 +255,14 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
   }
   async function openFile(f: FileRow) {
     const url = await signedUrl(f.path)
-    if (url) window.open(url, '_blank', 'noopener')
+    if (!url) return
+    // O armazenamento serve HTML como texto simples; os briefings abrem a partir de um blob.
+    if (f.name.startsWith('Briefing-') && f.name.endsWith('.html')) {
+      const text = await (await fetch(url)).text()
+      window.open(URL.createObjectURL(new Blob([text], { type: 'text/html;charset=utf-8' })), '_blank')
+      return
+    }
+    window.open(url, '_blank', 'noopener')
   }
   const delFile = (f: FileRow) =>
     undoable(`"${f.name}" apagado`, {
@@ -251,6 +276,14 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
       },
     })
 
+  if (view === 'brief') {
+    return (
+      <Sheet title="Briefing da consulta" onClose={onClose}>
+        <Briefing appt={a} onBack={() => { setView('detail'); void files.reload() }} onSaved={setBriefText} />
+      </Sheet>
+    )
+  }
+
   return (
     <Sheet title={a.title} onClose={onClose}>
       <p className="muted">{formatDateTime(a.starts_at)}{a.location ? ` · ${a.location}` : ''}</p>
@@ -263,7 +296,7 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
               title: a.title,
               start: a.starts_at,
               location: a.location,
-              notes: questions.data.filter((x) => !x.done).map((x) => `• ${x.text}`).join('\n') || undefined,
+              notes: briefText ?? (questions.data.filter((x) => !x.done).map((x) => `• ${x.text}`).join('\n') || undefined),
             }))
           }
         >
@@ -271,14 +304,20 @@ function Detail({ a, onClose, onDelete }: { a: Appt; onClose: () => void; onDele
         </button>
       )}
 
+      <button className="btn small" onClick={() => setView('brief')}>
+        <FileText size={18} aria-hidden /> Briefing da consulta{briefText ? ' · guardado' : ''}
+      </button>
+
       <h3 className="section">Perguntas para levar</h3>
       {questions.data.filter((x) => !hiddenQ.has(x.id)).map((x) => (
-        <div key={x.id} className="row">
+        <div key={x.id} className="row qrow">
           <label className="check"><input type="checkbox" checked={x.done} onChange={() => toggleQ(x)} /> <span className={x.done ? 'done' : ''}>{x.text}</span></label>
+          <button className={`prio p${x.priority}`} onClick={() => void cyclePriority(x)} aria-label={`Prioridade: ${PRIORITIES[x.priority - 1].label}. Tocar para mudar`}>{PRIORITIES[x.priority - 1].label}</button>
           <button className="icon-btn" onClick={() => delQ(x)} aria-label={`Apagar pergunta: ${x.text}`}><X size={18} /></button>
         </div>
       ))}
       <div className="inline">
+        <button className={`prio p${prio}`} onClick={() => setPrio((p) => (p % 3) + 1)} aria-label={`Prioridade da nova pergunta: ${PRIORITIES[prio - 1].label}. Tocar para mudar`}>{PRIORITIES[prio - 1].label}</button>
         <input aria-label="Nova pergunta" placeholder="Nova pergunta" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addQ()} />
         <button className="btn small" onClick={addQ} aria-label="Adicionar pergunta"><Plus size={18} weight="bold" /></button>
       </div>

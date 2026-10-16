@@ -436,9 +436,20 @@ label.cell .cell-label{flex:none;white-space:nowrap}
 .cell.full{border-color:var(--hue);color:var(--on-gold);font-weight:800}
 .cell.sel{outline:2px solid var(--ink);outline-offset:1px}
 .cell.future{border:0;background:none;pointer-events:none}
-.legend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:.8rem;margin:6px 0 0}
-.legend span{display:inline-flex;align-items:center;gap:6px}
-.legend .best{margin-left:auto}
-.legend .sw{width:14px;height:14px;border-radius:5px;border:1.5px solid var(--rule);background:var(--panel-2);display:inline-block}
-.legend .sw.mid{background:color-mix(in srgb,var(--hue) 50%,var(--panel-2))}
-.legend .sw.hi{background:var(--hue);border-color:var(--hue)}
+.hlegend{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:.8rem;margin:6px 0 0}
+.hlegend span{display:inline-flex;align-items:center;gap:6px}
+.hlegend .best{margin-left:auto}
+.hlegend .sw{width:14px;height:14px;border-radius:5px;border:1.5px solid var(--rule);background:var(--panel-2);display:inline-block}
+.hlegend .sw.mid{background:color-mix(in srgb,var(--hue) 50%,var(--panel-2))}
+.hlegend .sw.hi{background:var(--hue);border-color:var(--hue)}
+
+/* briefing da consulta */
+.brief-frame{width:100%;height:min(62dvh,560px);border:1.5px solid var(--rule);border-radius:18px;background:#fff}
+.prio{flex:none;border:0;border-radius:99px;padding:6px 10px;min-height:32px;font:700 .72rem var(--display);cursor:pointer;color:var(--on-gold);white-space:nowrap}
+.prio.p1{background:var(--coral)}
+.prio.p2{background:var(--sun)}
+.prio.p3{background:var(--mint)}
+.qrow{flex-wrap:wrap;row-gap:2px}
+.qrow .check{flex:1 1 100%}
+.qrow .prio{margin-left:32px}
+.qrow .icon-btn{margin-left:auto}

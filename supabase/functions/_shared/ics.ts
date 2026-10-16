@@ -12,6 +12,26 @@ export interface IcsEvent {
 }
 
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1')
+const enc = new TextEncoder()
+/** Linhas com mais de 75 bytes são dobradas (RFC 5545), sem partir caracteres UTF-8. */
+function fold(line: string): string {
+  if (enc.encode(line).length <= 75) return line
+  const out: string[] = []
+  let cur = ''
+  let bytes = 0
+  for (const ch of line) {
+    const n = enc.encode(ch).length
+    if (bytes + n > 75) {
+      out.push(cur)
+      cur = ' '
+      bytes = 1
+    }
+    cur += ch
+    bytes += n
+  }
+  out.push(cur)
+  return out.join('\r\n')
+}
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 
 function vevent(e: IcsEvent, now: Date): string[] {
@@ -43,5 +63,5 @@ export function buildCalendar(events: IcsEvent[], name?: string): string {
     ...events.flatMap((e) => vevent(e, now)),
     'END:VCALENDAR',
   ]
-  return lines.join('\r\n') + '\r\n'
+  return lines.map(fold).join('\r\n') + '\r\n'
 }
