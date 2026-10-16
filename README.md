@@ -3,7 +3,7 @@
 App de gravidez a dois (PWA): Vite + React + TypeScript + Supabase.
 
 ## Arrancar
-1. Criar um projeto Supabase e correr `supabase/migrations/0001_init.sql` (SQL Editor ou `supabase db push`).
+1. Criar um projeto Supabase e correr `supabase/migrations/0001_init.sql` e depois `0002_metas_diarias.sql` (SQL Editor ou `supabase db push`).
 2. `cp .env.example .env` e preencher URL e anon key.
 3. `npm install && npm run dev`
 

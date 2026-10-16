@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { CalendarCheck, Camera, ChatsCircle, House, ListChecks, Timer } from '@phosphor-icons/react'
+import { CalendarCheck, Camera, ChatsCircle, House, ListChecks, Target, Timer } from '@phosphor-icons/react'
 import type { Session } from '@supabase/supabase-js'
 import { configured, supabase } from './lib/supabase'
 import { Ctx, type AppCtx, type Member } from './lib/app-context'
@@ -13,12 +13,14 @@ import { ToastProvider } from './components/toast'
 
 // Só o Início vem no pacote inicial; as restantes páginas carregam a pedido.
 const loaders = {
+  goals: () => import('./pages/Goals'),
   appt: () => import('./pages/Appointments'),
   diary: () => import('./pages/Diary'),
   lists: () => import('./pages/Lists'),
   names: () => import('./pages/Names'),
   tools: () => import('./pages/Tools'),
 }
+const Goals = lazy(loaders.goals)
 const Appointments = lazy(loaders.appt)
 const Diary = lazy(loaders.diary)
 const Lists = lazy(loaders.lists)
@@ -27,6 +29,7 @@ const Tools = lazy(loaders.tools)
 
 const TABS = [
   { id: 'home', label: 'Início', icon: House, el: Home, hue: 'gold' },
+  { id: 'goals', label: 'Metas', icon: Target, el: Goals, hue: 'mint' },
   { id: 'appt', label: 'Consultas', icon: CalendarCheck, el: Appointments, hue: 'sky' },
   { id: 'diary', label: 'Diário', icon: Camera, el: Diary, hue: 'coral' },
   { id: 'lists', label: 'Listas', icon: ListChecks, el: Lists, hue: 'mint' },
